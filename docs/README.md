@@ -4,6 +4,13 @@
 
 ## Структура документации
 
+- **bot/** — документация по боту:
+  - **BOT_REQUIREMENTS.md** — требования к функционалу
+  - **BOT_FLOW.md** — пошаговый сценарий диалога
+  - **BOTFATHER_SETUP.md** — настройка в BotFather
+- **product_descriptions/** — описания продукта:
+  - **PRESENTATION_FULL_DESCRIPTION_INTERVIEWS.md** — описание с учётом интервью
+  - **PRESENTATION_LANDING.md** — лендинг продукта
 - **PRODUCT_DESCRIPTION.md** - Описание продукта, целевая аудитория, преимущества
 - **FEATURES.md** - Список реализованных и планируемых функций
 - **USER_GUIDE.md** - Руководство пользователя, инструкции по использованию
