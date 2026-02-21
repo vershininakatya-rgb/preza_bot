@@ -38,8 +38,14 @@ pip install -r requirements.txt
 4. Настройте переменные окружения:
 ```bash
 cp .env.example .env
-# Отредактируйте .env и добавьте ваш BOT_TOKEN
+# Отредактируйте .env:
+# - BOT_TOKEN — токен бота от @BotFather
+# - LLM_API_KEY — API-ключ LLM (если бот использует генерацию текста/анализ через LLM)
 ```
+
+**Где взять токены:**
+- **BOT_TOKEN** — [@BotFather](https://t.me/BotFather) в Telegram (`/newbot` или `/token`).
+- **LLM_API_KEY** — у провайдера LLM (например, [OpenAI API keys](https://platform.openai.com/api-keys)). Загружается в `.env` и читается в коде через `bot.config.settings.LLM_API_KEY`.
 
 ## Запуск
 
