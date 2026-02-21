@@ -1,0 +1,43 @@
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+      
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
+      
+      - name: Install dependencies
+        run: |
+          pip install -r requirements.txt
+      
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            requirements.txt
+          body: |
+            ## 🚀 Release ${{ github.ref_name }}
+            
+            Автоматически созданный релиз.
+            
+            ### 📦 Установка
+            ```bash
+            pip install -r requirements.txt
+            python run.py
+            ```
+            
+            ### 📝 Изменения
+            Проверьте коммиты для списка изменений.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
