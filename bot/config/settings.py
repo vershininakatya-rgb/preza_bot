@@ -9,8 +9,10 @@ load_dotenv()
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 
 # LLM API Key (опционально; нужен, если бот вызывает LLM для генерации текста/анализа)
-# Загружается из .env: LLM_API_KEY
 LLM_API_KEY = os.getenv('LLM_API_KEY')
+
+# Chat ID администратора для уведомлений «Нужна помощь» (опционально)
+ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID')
 
 # Настройки логирования
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
