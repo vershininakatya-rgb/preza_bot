@@ -38,5 +38,16 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик ошибок."""
     import logging
+    from telegram.error import Conflict
+
     logger = logging.getLogger(__name__)
-    logger.error(f"Update {update} caused error {context.error}")
+    err = context.error
+
+    if isinstance(err, Conflict):
+        logger.error(
+            "409 Conflict: уже запущен другой экземпляр бота. "
+            "Остановите его: make stop или pkill -f 'python run.py'"
+        )
+        return
+
+    logger.error("Update %s caused error %s", update, err)

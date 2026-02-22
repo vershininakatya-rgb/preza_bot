@@ -1,4 +1,4 @@
-.PHONY: build run install clean test
+.PHONY: build run install clean test stop restart status
 
 # По умолчанию — build
 all: build
@@ -17,8 +17,27 @@ build:
 install:
 	./venv/bin/pip install -q -r requirements.txt
 
-# Запуск бота
+# Остановить бота
+stop:
+	@echo "==> Остановка бота..."
+	@pkill -f "python run.py" 2>/dev/null || pkill -f "run.py" 2>/dev/null || true
+	@echo "Бот остановлен."
+
+# Статус: запущен ли бот
+status:
+	@pgrep -f "run.py" >/dev/null 2>&1 && echo "Бот запущен (PID: $$(pgrep -f 'run.py' | tr '\n' ' ')). Остановить: make stop" || echo "Бот не запущен"
+
+# Перезапуск: остановить + запустить
+restart: stop
+	@sleep 1
+	@$(MAKE) run
+
+# Запуск бота (с проверкой: не запущен ли уже)
 run:
+	@if pgrep -f "run.py" >/dev/null 2>&1; then \
+		echo "Ошибка: бот уже запущен. Используйте: make stop или make restart"; \
+		exit 1; \
+	fi
 	./venv/bin/python run.py
 
 # Запуск тестов (если есть)
