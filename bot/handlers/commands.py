@@ -9,9 +9,17 @@ from bot.steps.flow import get_step_message, get_step_keyboard
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команды /start — сброс сессии и показ шага 1."""
     user_id = update.effective_user.id
+    state = get_state(user_id)
+    # Если пользователь в процессе сценария — не сбрасывать (Telegram может слать /start при открытии чата)
+    step = state.get("step", "1")
+    in_flow = step != "1" or bool(state.get("onboarding") or state.get("context") or state.get("data"))
+    if in_flow:
+        msg = get_step_message(step, state)
+        kb = get_step_keyboard(step)
+        await update.message.reply_text(msg, reply_markup=kb)
+        return
     clear_state(user_id)
     state = get_state(user_id)
-    state["step"] = "1"
     msg = get_step_message("1")
     kb = get_step_keyboard("1")
     await update.message.reply_text(msg, reply_markup=kb)

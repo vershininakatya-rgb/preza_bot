@@ -85,7 +85,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         return
 
     # Обычный переход на следующий шаг
-    msg = get_step_message(next_step)
+    msg = get_step_message(next_step, new_state)
     kb = get_step_keyboard(next_step)
     if msg:
         await update.message.reply_text(msg, reply_markup=kb)

@@ -9,8 +9,17 @@ from bot.keyboards import (
     keyboard_help_only,
 )
 
-def get_step_message(step: str) -> str:
+def get_step_message(step: str, state: Optional[dict] = None) -> str:
     """Текст сообщения для шага."""
+    # Динамическое сообщение для шага 2_5 при множественном выборе ролей
+    if step == "2_5" and state:
+        hint = state.get("_hint_2_5")
+        if hint:
+            return hint
+        roles = state.get("onboarding", {}).get("interview_roles")
+        if isinstance(roles, list) and roles:
+            return f"Выбрано: {', '.join(roles)}.\nВыберите ещё или нажмите «Готово»."
+
     texts = {
         "1": (
             "Привет! 👋 Я бот. Я помогаю проанализировать проблемы в процессах "
@@ -25,8 +34,8 @@ def get_step_message(step: str) -> str:
         ),
         "2_1": "Кто вы по роли?",
         "2_2": "Для кого готовите презентацию?",
-        "2_3": "Какой тип задачи?",
-        "2_4": "Какова цель встречи?",
+        "2_3": "Какая у вас проблема?",
+        "2_3_other": "Опишите проблему своими словами:",
         "2_5": "С кем будет проводиться интервью? (роли: C-level, руководитель, тимлид, команда, аналитики)",
         "2_6": "Нужно ли составить отдельные вопросы для каждой роли?",
         "2_7": (
@@ -58,27 +67,29 @@ def get_step_keyboard(step: str) -> Optional[ReplyKeyboardMarkup]:
     if step == "2_1":
         return keyboard_simple([
             "Деливери-менеджер", "Скрам-мастер", "Change-менеджер",
+            "Team Lead / руководитель команды", "Product Manager",
             "Агент изменений", "Другое",
         ])
     if step == "2_2":
         return keyboard_simple([
-            "C-level", "Директора направлений", "Миддл-менеджмент", "Смешанная аудитория",
+            "C-level", "Команда", "Миддл-менеджмент", "Смешанная аудитория",
         ])
     if step == "2_3":
         return keyboard_simple([
-            "Полный цикл (анализ + презентация)",
-            "Анализ уже есть, нужна только презентация",
-            "Быстрая проверка анализа и истории",
+            "Долго разрабатываем",
+            "Много задач в работе",
+            "Задержки при задачах на несколько команд",
+            "Проблемы с приоритизацией",
+            "Не работает Discovery",
+            "Другое",
         ])
-    if step == "2_4":
-        return keyboard_choice([
-            ["Одобрение решения", "Старт пилота", "Масштабирование"],
-            ["Защита результатов", "Разбор проблемной команды", "Подготовка к стратегсессии"],
-        ])
+    if step == "2_3_other":
+        return keyboard_help_only()
     if step == "2_5":
         return keyboard_choice([
             ["C-level", "Руководитель", "Тимлид"],
             ["Команда", "Аналитики", "Стейкхолдеры"],
+            ["Готово"],
         ])
     if step == "2_6":
         return keyboard_two("Да", "Нет")
@@ -94,7 +105,7 @@ def get_step_keyboard(step: str) -> Optional[ReplyKeyboardMarkup]:
     if step == "0H_3":
         return keyboard_two("Вернуться в диалог", "В главное меню")
     # Шаги с вводом текста — только «Нужна помощь»
-    if step in ("3_2", "3_3", "5_1", "5_2", "5_3", "5_4", "2_7", "0H_1"):
+    if step in ("3_2", "3_3", "5_1", "5_2", "5_3", "5_4", "2_7", "2_3_other", "0H_1"):
         return keyboard_help_only()
     return keyboard_help_only()
 
@@ -143,14 +154,36 @@ def process_step_answer(step: str, text: str, state: dict) -> tuple[str, dict]:
         state["onboarding"]["audience"] = text
         return _next("2_3")
     if step == "2_3":
-        state["onboarding"]["task_type"] = text
-        return _next("2_4")
-    if step == "2_4":
-        state["onboarding"]["meeting_goal"] = text
+        if text == "Другое":
+            return _next("2_3_other")
+        state["onboarding"]["problem"] = text
+        return _next("2_5")
+    if step == "2_3_other":
+        state["onboarding"]["problem"] = text
         return _next("2_5")
     if step == "2_5":
-        state["onboarding"]["interview_roles"] = text
-        return _next("2_6")
+        ROLES_2_5 = {"C-level", "Руководитель", "Тимлид", "Команда", "Аналитики", "Стейкхолдеры"}
+        if text == "Готово":
+            roles = state["onboarding"].get("interview_roles")
+            if isinstance(roles, list) and roles:
+                state["onboarding"]["interview_roles"] = ", ".join(roles)
+                if "_hint_2_5" in state:
+                    del state["_hint_2_5"]
+                return _next("2_6")
+            state["_hint_2_5"] = "Выберите хотя бы одну роль и нажмите «Готово»."
+            return "2_5", state
+        if text in ROLES_2_5:
+            roles = state["onboarding"].get("interview_roles")
+            if not isinstance(roles, list):
+                roles = []
+            if text not in roles:
+                roles = roles + [text]
+            state["onboarding"]["interview_roles"] = roles
+            if "_hint_2_5" in state:
+                del state["_hint_2_5"]
+            return "2_5", state
+        # Неизвестный ввод — остаёмся на шаге
+        return "2_5", state
     if step == "2_6":
         state["onboarding"]["questions_per_role"] = text
         return _next("2_7")
@@ -199,7 +232,7 @@ def _format_state_for_llm(state: dict) -> str:
     return f"""
 Роль: {o.get('role', '—')}
 Аудитория: {o.get('audience', '—')}
-Тип задачи: {o.get('task_type', '—')}
+Проблема: {o.get('problem', '—')}
 Цель встречи: {o.get('meeting_goal', '—')}
 Роли для интервью: {o.get('interview_roles', '—')}
 Проблема и желаемый результат: {o.get('problem_and_result', '—')}
@@ -227,6 +260,7 @@ def build_analytics_tree(state: dict) -> str:
         "Роль и контекст:",
         f"• Роль: {o.get('role', '—')}",
         f"• Аудитория: {o.get('audience', '—')}",
+        f"• Проблема: {o.get('problem', '—')}",
         f"• Цель встречи: {o.get('meeting_goal', '—')}",
         f"• Проблема и результат: {o.get('problem_and_result', '—')}",
         "",
