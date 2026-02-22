@@ -10,6 +10,13 @@ bot/
 ├── handlers/            # Обработчики событий
 │   ├── commands.py
 │   └── messages.py
+├── storage/             # Хранение состояния
+│   └── session.py       # Сессии в памяти (user_id → state)
+├── steps/               # Логика шагов диалога
+│   └── flow.py          # Тексты, клавиатуры, переходы, дерево анализа
+├── keyboards.py         # Построение клавиатур
+├── services/            # Внешние сервисы
+│   └── llm.py           # Интеграция с OpenAI
 └── utils/               # Утилиты
     ├── logger.py
     └── helpers.py
@@ -23,17 +30,26 @@ bot/
 - Запуск polling
 
 ### 2. Конфигурация (config/)
-- Загрузка переменных окружения
-- Настройки приложения
-- Управление секретами
+- Загрузка переменных окружения (.env)
+- BOT_TOKEN, LLM_API_KEY, ADMIN_CHAT_ID
 
 ### 3. Обработчики (handlers/)
-- **commands.py**: Обработка команд бота
-- **messages.py**: Обработка текстовых сообщений
+- **commands.py**: /start, /help
+- **messages.py**: маршрутизация по шагам, «Нужна помощь», дерево анализа
 
-### 4. Утилиты (utils/)
-- **logger.py**: Настройка логирования
-- **helpers.py**: Вспомогательные функции
+### 4. Хранение (storage/)
+- **session.py**: словарь user_id → state в памяти
+- get_state, set_state, clear_state
+
+### 5. Шаги (steps/)
+- **flow.py**: тексты вопросов, клавиатуры, переходы, build_analytics_tree (с LLM или fallback)
+
+### 6. Сервисы (services/)
+- **llm.py**: вызов OpenAI API для генерации дерева анализа
+
+### 7. Утилиты (utils/)
+- **logger.py**: настройка логирования
+- **helpers.py**: вспомогательные функции
 
 ## Поток данных
 
@@ -42,9 +58,9 @@ Telegram API
     ↓
 Application (main.py)
     ↓
-Handlers (commands.py, messages.py)
+Handlers → storage (state) + steps (flow) + keyboards
     ↓
-Utils (helpers.py)
+services/llm (при шаге 6 — дерево анализа)
     ↓
 Response → Telegram API
 ```

@@ -192,8 +192,32 @@ def process_step_answer(step: str, text: str, state: dict) -> tuple[str, dict]:
     return step, state
 
 
+def _format_state_for_llm(state: dict) -> str:
+    """Форматирование данных сессии для промпта LLM."""
+    o = state.get("onboarding", {})
+    c = state.get("context", {})
+    d = state.get("data", {})
+    return f"""
+Роль: {o.get('role', '—')}
+Аудитория: {o.get('audience', '—')}
+Тип задачи: {o.get('task_type', '—')}
+Цель встречи: {o.get('meeting_goal', '—')}
+Роли для интервью: {o.get('interview_roles', '—')}
+Проблема и желаемый результат: {o.get('problem_and_result', '—')}
+
+Область проблемы: {c.get('area', '—')}
+Спонсор: {c.get('sponsor', '—')}
+Боли/симптомы: {c.get('pains', '—')}
+
+Данные и метрики: {d.get('uploads', '—')} {d.get('metrics', '—')}
+Тренды и аномалии: {d.get('trends', '—')}
+Интервью и цитаты: {d.get('interviews', '—')}
+Дополнительно: {d.get('extra', '—')}
+""".strip()
+
+
 def build_analytics_tree(state: dict) -> str:
-    """Сформировать дерево анализа и паттерны из собранных данных."""
+    """Сформировать дерево анализа и паттерны из собранных данных (без LLM)."""
     o = state.get("onboarding", {})
     c = state.get("context", {})
     d = state.get("data", {})
@@ -228,3 +252,28 @@ def build_analytics_tree(state: dict) -> str:
         "Дальше: решения, план, риски → сторителлинг → презентация.",
     ]
     return "\n".join(lines)
+
+
+async def build_analytics_tree_with_llm(state: dict) -> str:
+    """
+    Сформировать дерево анализа с помощью OpenAI.
+    При отсутствии ключа или ошибке API — fallback на build_analytics_tree.
+    """
+    try:
+        from bot.services.llm import llm_generate
+
+        data = _format_state_for_llm(state)
+        system = (
+            "Ты — эксперт по аналитике для C-level презентаций. "
+            "На основе данных пользователя сформируй структурированное «дерево анализа»: "
+            "роль и контекст, область проблемы, данные, непокрытые зоны, паттерны и противоречия. "
+            "Пиши кратко, по пунктам. Язык — русский. В конце добавь: «Дальше: решения, план, риски → сторителлинг → презентация.»"
+        )
+        prompt = f"Сформируй дерево анализа на основе этих данных:\n\n{data}"
+        result = await llm_generate(prompt, system_prompt=system, max_tokens=1500)
+        if result:
+            return "📊 Дерево анализа\n\n" + result
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("LLM analytics tree failed: %s", e)
+    return build_analytics_tree(state)

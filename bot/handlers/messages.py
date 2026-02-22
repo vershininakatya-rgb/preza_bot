@@ -8,7 +8,7 @@ from bot.steps.flow import (
     get_step_message,
     get_step_keyboard,
     process_step_answer,
-    build_analytics_tree,
+    build_analytics_tree_with_llm,
 )
 
 
@@ -34,9 +34,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     if step == "0H_1":
         state["step"] = "0H_3"
         set_state(user_id, state)
-        await update.message.reply_text(get_step_message("0H_3"))
+        msg = get_step_message("0H_3")
         kb = get_step_keyboard("0H_3")
-        await update.message.reply_text("Выберите:", reply_markup=kb)
+        await update.message.reply_text(msg, reply_markup=kb)
         if ADMIN_CHAT_ID:
             try:
                 admin_id = int(ADMIN_CHAT_ID)
@@ -47,7 +47,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     f"Текст: {text}"
                 )
                 await context.bot.send_message(chat_id=admin_id, text=admin_msg)
-            except (ValueError, Exception):
+            except Exception:
                 pass
         return
 
@@ -70,9 +70,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     next_step, new_state = process_step_answer(step, text, state)
     set_state(user_id, new_state)
 
-    # Шаг 6_1: показываем дерево анализа
+    # Шаг 6_1: показываем дерево анализа (с LLM, если настроен)
     if next_step == "6_1":
-        tree_text = build_analytics_tree(new_state)
+        tree_text = await build_analytics_tree_with_llm(new_state)
         kb = get_step_keyboard("6_1")
         await update.message.reply_text(tree_text, reply_markup=kb)
         return
