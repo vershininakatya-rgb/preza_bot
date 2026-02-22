@@ -9,17 +9,19 @@ from bot.keyboards import (
     keyboard_help_only,
 )
 
-# Сценарии, ведущие к аналитике (контекст + данные + дерево)
-ANALYTICS_SCENARIOS = {"Помощь с аналитикой", "Полный цикл"}
-
-
 def get_step_message(step: str) -> str:
     """Текст сообщения для шага."""
     texts = {
         "1": (
-            "Привет! 👋 Я помогаю готовить презентации для C-level: "
-            "от анализа проблемы до готовой презентации в вашем шаблоне.\n\n"
-            "С чем помочь?"
+            "Привет! 👋 Я бот. Я помогаю проанализировать проблемы в процессах "
+            "и подготовить презентацию для руководителей.\n\n"
+            "С помощью меня ты сможешь:\n"
+            "• подготовить интервью для аналитики\n"
+            "• проанализировать метрики\n"
+            "• получить дерево решений\n"
+            "• выявить повторяющиеся паттерны\n"
+            "• получить рекомендации по решению проблем\n\n"
+            'Нажми кнопку «Помощь с аналитикой», чтобы начать.'
         ),
         "2_1": "Кто вы по роли?",
         "2_2": "Для кого готовите презентацию?",
@@ -125,8 +127,7 @@ def process_step_answer(step: str, text: str, state: dict) -> tuple[str, dict]:
         return "1", state
 
     if step == "1":
-        scenarios = {"Помощь с аналитикой", "Вопросы для интервью", "Подготовить презентацию", "Полный цикл"}
-        if text in scenarios:
+        if text == "Помощь с аналитикой":
             state["scenario"] = text
             state["step"] = "2_1"
             return "2_1", state
@@ -155,9 +156,7 @@ def process_step_answer(step: str, text: str, state: dict) -> tuple[str, dict]:
         return _next("2_7")
     if step == "2_7":
         state["onboarding"]["problem_and_result"] = text
-        if state["scenario"] in ANALYTICS_SCENARIOS:
-            return _next("3_1")
-        return _next("5_1")  # Вопросы/Презентация — упрощённо к данным
+        return _next("3_1")  # Единственный сценарий — анализ
 
     if step == "3_1":
         state["context"]["area"] = text
