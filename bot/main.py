@@ -19,9 +19,15 @@ def main() -> None:
     application.add_handler(CommandHandler("start", commands.start_command))
     application.add_handler(CommandHandler("help", commands.help_command))
 
-    # Регистрируем обработчик текстовых сообщений
+    # Регистрируем обработчики сообщений
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, messages.handle_message)
+    )
+    application.add_handler(
+        MessageHandler(filters.PHOTO, messages.handle_photo)
+    )
+    application.add_handler(
+        MessageHandler(filters.Document.ALL, messages.handle_document)
     )
 
     # Регистрируем обработчик ошибок

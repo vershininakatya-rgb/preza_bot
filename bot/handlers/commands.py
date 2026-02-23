@@ -12,7 +12,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     state = get_state(user_id)
     # Если пользователь в процессе сценария — не сбрасывать (Telegram может слать /start при открытии чата)
     step = state.get("step", "1")
-    in_flow = step != "1" or bool(state.get("onboarding") or state.get("context") or state.get("data"))
+    in_flow = step != "1" or bool(state.get("data"))
     if in_flow:
         msg = get_step_message(step, state)
         kb = get_step_keyboard(step)
@@ -31,7 +31,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "📋 Доступные команды:\n\n"
         "/start — Начать работу с ботом (сброс и главное меню)\n"
         "/help — Показать это сообщение\n\n"
-        "Бот ведёт по сценарию анализа: онбординг → контекст → данные → дерево анализа."
+        "Бот анализирует проблемы: загрузите схему процесса и результаты интервью → получите анализ и варианты решений."
     )
     await update.message.reply_text(help_text)
     # Переход в меню как при /start

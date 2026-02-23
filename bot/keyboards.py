@@ -1,8 +1,8 @@
 """Клавиатуры бота."""
 from telegram import ReplyKeyboardMarkup, KeyboardButton
 
-# Кнопка сценария (Шаг 1) — один сценарий: анализ
-SCENARIO_BUTTONS = [[KeyboardButton("Помощь с аналитикой")]]
+# Кнопка сценария (Шаг 1) — один сценарий: анализ проблемы
+SCENARIO_BUTTONS = [[KeyboardButton("Анализ проблемы")]]
 
 # Кнопка «Нужна помощь» (добавляется к клавиатурам)
 HELP_BUTTON = [[KeyboardButton("Нужна помощь")]]

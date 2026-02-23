@@ -32,13 +32,11 @@ restart: stop
 	@sleep 1
 	@$(MAKE) run
 
-# Запуск бота (с проверкой: не запущен ли уже)
+# Запуск бота (всегда один экземпляр: останавливает старые, запускает новый)
 run:
-	@if pgrep -f "run.py" >/dev/null 2>&1; then \
-		echo "Ошибка: бот уже запущен. Используйте: make stop или make restart"; \
-		exit 1; \
-	fi
-	./venv/bin/python run.py
+	@pkill -f "python run.py" 2>/dev/null || pkill -f "run.py" 2>/dev/null || true
+	@sleep 1
+	@./venv/bin/python run.py
 
 # Запуск тестов (если есть)
 test:

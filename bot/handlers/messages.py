@@ -1,4 +1,5 @@
 """Обработчики сообщений бота."""
+import io
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -8,8 +9,10 @@ from bot.steps.flow import (
     get_step_message,
     get_step_keyboard,
     process_step_answer,
-    build_analytics_tree_with_llm,
+    analyze_problem_with_llm,
 )
+from bot.services.llm import llm_supplement_analysis
+from bot.utils.file_extract import extract_text_from_bytes
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -51,15 +54,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 pass
         return
 
-    # Шаг 0H_3 — обрабатывается в process_step_answer (Вернуться / В меню)
-
     # «Начать сначала», «Справка» — сброс в шаг 1
     if text in ("Начать сначала", "Справка"):
         state["step"] = "1"
         state["scenario"] = None
-        state["onboarding"] = {}
-        state["context"] = {}
         state["data"] = {}
+        state["analysis_result"] = None
+        state["extra_request"] = None
         set_state(user_id, state)
         msg = get_step_message("1")
         kb = get_step_keyboard("1")
@@ -70,14 +71,33 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     next_step, new_state = process_step_answer(step, text, state)
     set_state(user_id, new_state)
 
-    # Шаг 6_1: показываем дерево анализа (с LLM, если настроен)
-    if next_step == "6_1":
-        tree_text = await build_analytics_tree_with_llm(new_state)
-        kb = get_step_keyboard("6_1")
-        await update.message.reply_text(tree_text, reply_markup=kb)
+    # Шаг 2_result: показываем результат анализа (LLM)
+    if next_step == "2_result":
+        analysis_text = await analyze_problem_with_llm(new_state)
+        new_state["analysis_result"] = analysis_text
+        set_state(user_id, new_state)
+        kb = get_step_keyboard("2_result")
+        await update.message.reply_text(analysis_text, reply_markup=kb)
         return
 
-    # Переход в шаг 1 (меню) — уже обработан в process_step_answer
+    # Шаг 2_extra_result: дополнительная аналитика по запросу пользователя
+    if next_step == "2_extra_result":
+        data = new_state.get("data", {})
+        texts = data.get("texts", [])
+        files = data.get("file_descriptions", [])
+        data_text = "\n\n---\n\n".join(texts + files)
+        original = new_state.get("analysis_result", "")
+        request = new_state.get("extra_request", "")
+        supplement = await llm_supplement_analysis(data_text, original, request)
+        if supplement:
+            msg = f"📊 Дополнительная аналитика\n\n{supplement}"
+        else:
+            msg = "Не удалось выполнить дополнительный анализ (проверьте OPENAI_API_KEY)."
+        kb = get_step_keyboard("2_extra_result")
+        await update.message.reply_text(msg, reply_markup=kb)
+        return
+
+    # Переход в шаг 1 (меню)
     if next_step == "1":
         msg = get_step_message("1")
         kb = get_step_keyboard("1")
@@ -91,3 +111,104 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await update.message.reply_text(msg, reply_markup=kb)
     else:
         await update.message.reply_text("Продолжаем.", reply_markup=kb)
+
+
+async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик документов — извлечение текста и добавление в данные."""
+    user_id = update.effective_user.id
+    state = get_state(user_id)
+    step = state.get("step", "1")
+
+    if step != "2_upload":
+        await update.message.reply_text("Загрузите файлы на шаге «Анализ проблемы».")
+        return
+
+    doc = update.message.document
+    if not doc or not doc.file_id:
+        return
+
+    try:
+        file = await context.bot.get_file(doc.file_id)
+        buf = io.BytesIO()
+        await file.download_to_memory(buf)
+        buf.seek(0)
+        data = buf.read()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Failed to download document: %s", e)
+        await update.message.reply_text("Не удалось загрузить файл. Попробуйте другой формат (TXT, PDF).")
+        return
+
+    text = extract_text_from_bytes(data, doc.file_name)
+    if text:
+        if "data" not in state:
+            state["data"] = {"texts": [], "file_descriptions": []}
+        state["data"].setdefault("file_descriptions", []).append(
+            f"[Файл: {doc.file_name}]\n{text[:8000]}"
+        )
+        state["step"] = "2_result"
+        set_state(user_id, state)
+        analysis_text = await analyze_problem_with_llm(state)
+        state["analysis_result"] = analysis_text
+        set_state(user_id, state)
+        kb = get_step_keyboard("2_result")
+        await update.message.reply_text(analysis_text, reply_markup=kb)
+    else:
+        await update.message.reply_text(
+            "Не удалось извлечь текст из файла. Поддерживаются: TXT, MD, PDF, DOC, DOCX, XLS, XLSX. "
+            "Или вставьте текст в сообщение.",
+        )
+
+
+async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    """Обработчик фото — описание через Vision API и добавление в данные."""
+    user_id = update.effective_user.id
+    state = get_state(user_id)
+    step = state.get("step", "1")
+
+    if step != "2_upload":
+        await update.message.reply_text("Загрузите фото на шаге «Анализ проблемы».")
+        return
+
+    photo = update.message.photo[-1] if update.message.photo else None
+    if not photo or not photo.file_id:
+        return
+
+    try:
+        file = await context.bot.get_file(photo.file_id)
+        buf = io.BytesIO()
+        await file.download_to_memory(buf)
+        buf.seek(0)
+        data = buf.read()
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Failed to download photo: %s", e)
+        await update.message.reply_text("Не удалось загрузить фото.")
+        return
+
+    try:
+        from bot.services.llm import llm_describe_image
+
+        description = await llm_describe_image(bytes(data))
+        if description:
+            if "data" not in state:
+                state["data"] = {"texts": [], "file_descriptions": []}
+            state["data"].setdefault("file_descriptions", []).append(
+                f"[Описание схемы/диаграммы]\n{description}"
+            )
+            state["step"] = "2_result"
+            set_state(user_id, state)
+            analysis_text = await analyze_problem_with_llm(state)
+            state["analysis_result"] = analysis_text
+            set_state(user_id, state)
+            kb = get_step_keyboard("2_result")
+            await update.message.reply_text(analysis_text, reply_markup=kb)
+        else:
+            await update.message.reply_text(
+                "Не удалось распознать изображение (проверьте OPENAI_API_KEY). "
+                "Попробуйте отправить текст или документ.",
+            )
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).warning("Photo analysis failed: %s", e)
+        await update.message.reply_text("Ошибка при обработке фото. Попробуйте текст или документ.")
