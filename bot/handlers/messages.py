@@ -13,6 +13,7 @@ from bot.steps.flow import (
 )
 from bot.services.llm import llm_supplement_analysis
 from bot.utils.file_extract import extract_text_from_bytes
+from bot.utils.reply import reply_with_photo
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -30,7 +31,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         set_state(user_id, state)
         msg = get_step_message("0H_1")
         kb = get_step_keyboard("0H_1")
-        await update.message.reply_text(msg, reply_markup=kb)
+        await reply_with_photo(update, msg, "0H_1", kb)
         return
 
     # Шаг 0H_1: пользователь описал проблему — уведомление админу и переход в 0H_3
@@ -39,7 +40,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         set_state(user_id, state)
         msg = get_step_message("0H_3")
         kb = get_step_keyboard("0H_3")
-        await update.message.reply_text(msg, reply_markup=kb)
+        await reply_with_photo(update, msg, "0H_3", kb)
         if ADMIN_CHAT_ID:
             try:
                 admin_id = int(ADMIN_CHAT_ID)
@@ -64,7 +65,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         set_state(user_id, state)
         msg = get_step_message("1")
         kb = get_step_keyboard("1")
-        await update.message.reply_text(msg, reply_markup=kb)
+        await reply_with_photo(update, msg, "1", kb)
         return
 
     # Обработка ответа по текущему шагу
@@ -77,7 +78,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         new_state["analysis_result"] = analysis_text
         set_state(user_id, new_state)
         kb = get_step_keyboard("2_result")
-        await update.message.reply_text(analysis_text, reply_markup=kb)
+        await reply_with_photo(update, analysis_text, "2_result", kb)
         return
 
     # Шаг 2_extra_result: дополнительная аналитика по запросу пользователя
@@ -94,21 +95,21 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         else:
             msg = "Не удалось выполнить дополнительный анализ (проверьте OPENAI_API_KEY)."
         kb = get_step_keyboard("2_extra_result")
-        await update.message.reply_text(msg, reply_markup=kb)
+        await reply_with_photo(update, msg, "2_extra_result", kb)
         return
 
     # Переход в шаг 1 (меню)
     if next_step == "1":
         msg = get_step_message("1")
         kb = get_step_keyboard("1")
-        await update.message.reply_text(msg, reply_markup=kb)
+        await reply_with_photo(update, msg, "1", kb)
         return
 
     # Обычный переход на следующий шаг
     msg = get_step_message(next_step, new_state)
     kb = get_step_keyboard(next_step)
     if msg:
-        await update.message.reply_text(msg, reply_markup=kb)
+        await reply_with_photo(update, msg, next_step, kb)
     else:
         await update.message.reply_text("Продолжаем.", reply_markup=kb)
 
@@ -120,7 +121,11 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     step = state.get("step", "1")
 
     if step != "2_upload":
-        await update.message.reply_text("Загрузите файлы на шаге «Анализ проблемы».")
+        await reply_with_photo(
+            update,
+            "Загрузите файлы на шаге «Анализ проблемы».",
+            "2_upload",
+        )
         return
 
     doc = update.message.document
@@ -152,7 +157,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         state["analysis_result"] = analysis_text
         set_state(user_id, state)
         kb = get_step_keyboard("2_result")
-        await update.message.reply_text(analysis_text, reply_markup=kb)
+        await reply_with_photo(update, analysis_text, "2_result", kb)
     else:
         await update.message.reply_text(
             "Не удалось извлечь текст из файла. Поддерживаются: TXT, MD, PDF, DOC, DOCX, XLS, XLSX. "
@@ -167,7 +172,11 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     step = state.get("step", "1")
 
     if step != "2_upload":
-        await update.message.reply_text("Загрузите фото на шаге «Анализ проблемы».")
+        await reply_with_photo(
+            update,
+            "Загрузите фото на шаге «Анализ проблемы».",
+            "2_upload",
+        )
         return
 
     photo = update.message.photo[-1] if update.message.photo else None
@@ -202,7 +211,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             state["analysis_result"] = analysis_text
             set_state(user_id, state)
             kb = get_step_keyboard("2_result")
-            await update.message.reply_text(analysis_text, reply_markup=kb)
+            await reply_with_photo(update, analysis_text, "2_result", kb)
         else:
             await update.message.reply_text(
                 "Не удалось распознать изображение (проверьте OPENAI_API_KEY). "

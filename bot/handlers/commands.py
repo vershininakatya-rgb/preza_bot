@@ -4,6 +4,7 @@ from telegram.ext import ContextTypes
 
 from bot.storage import get_state, clear_state
 from bot.steps.flow import get_step_message, get_step_keyboard
+from bot.utils.reply import reply_with_photo
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -16,13 +17,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     if in_flow:
         msg = get_step_message(step, state)
         kb = get_step_keyboard(step)
-        await update.message.reply_text(msg, reply_markup=kb)
+        await reply_with_photo(update, msg, step, kb)
         return
     clear_state(user_id)
     state = get_state(user_id)
     msg = get_step_message("1")
     kb = get_step_keyboard("1")
-    await update.message.reply_text(msg, reply_markup=kb)
+    await reply_with_photo(update, msg, "1", kb)
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -40,7 +41,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     state = get_state(user_id)
     msg = get_step_message("1")
     kb = get_step_keyboard("1")
-    await update.message.reply_text(msg, reply_markup=kb)
+    await reply_with_photo(update, msg, "1", kb)
 
 
 async def error_handler(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
