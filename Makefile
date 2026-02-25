@@ -17,10 +17,12 @@ build:
 install:
 	./venv/bin/pip install -q -r requirements.txt
 
-# Остановить бота
+# Остановить бота (принудительно)
 stop:
 	@echo "==> Остановка бота..."
-	@pkill -f "python run.py" 2>/dev/null || pkill -f "run.py" 2>/dev/null || true
+	@pkill -9 -f "python run.py" 2>/dev/null || true
+	@pkill -9 -f "run.py" 2>/dev/null || true
+	@sleep 2
 	@echo "Бот остановлен."
 
 # Статус: запущен ли бот
@@ -29,13 +31,14 @@ status:
 
 # Перезапуск: остановить + запустить
 restart: stop
-	@sleep 1
+	@sleep 3
 	@$(MAKE) run
 
 # Запуск бота (всегда один экземпляр: останавливает старые, запускает новый)
 run:
-	@pkill -f "python run.py" 2>/dev/null || pkill -f "run.py" 2>/dev/null || true
-	@sleep 1
+	@pkill -9 -f "python run.py" 2>/dev/null || true
+	@pkill -9 -f "run.py" 2>/dev/null || true
+	@sleep 3
 	@./venv/bin/python run.py
 
 # Запуск тестов (если есть)

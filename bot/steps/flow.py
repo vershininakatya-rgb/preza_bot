@@ -42,8 +42,8 @@ def get_step_keyboard(step: str) -> Optional[ReplyKeyboardMarkup]:
         return keyboard_help_only()
     if step == "2_result":
         return keyboard_choice([
-            ["Нужна дополнительная аналитика"],
-            ["Начать сначала", "В главное меню"],
+            ["Сделать диаграмму решений", "Нужна дополнительная аналитика"],
+            ["Начать сначала"],
         ])
     if step == "2_extra_ask":
         return keyboard_help_only()
@@ -125,15 +125,19 @@ async def analyze_problem_with_llm(state: dict) -> str:
 
     try:
         from bot.services.llm import llm_analyze_problem
+        from bot.utils.format import format_analysis_text
 
         result = await llm_analyze_problem(combined)
         if result:
-            return "📊 Анализ проблемы\n\n" + result
+            raw = "**Анализ проблемы**\n\n" + result
+            return format_analysis_text(raw)
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning("LLM analysis failed: %s", e)
 
-    return (
+    from bot.utils.format import format_analysis_text
+    fallback = (
         "Не удалось выполнить анализ (проверьте настройку OPENAI_API_KEY).\n\n"
         "Данные для ручного анализа:\n" + combined[:2000]
     )
+    return format_analysis_text(fallback)

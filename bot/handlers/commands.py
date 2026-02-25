@@ -34,7 +34,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "/help — Показать это сообщение\n\n"
         "Бот анализирует проблемы: загрузите схему процесса и результаты интервью → получите анализ и варианты решений."
     )
-    await update.message.reply_text(help_text)
+    await reply_with_photo(update, help_text, "1")
     # Переход в меню как при /start
     user_id = update.effective_user.id
     clear_state(user_id)

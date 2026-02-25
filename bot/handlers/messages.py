@@ -11,8 +11,9 @@ from bot.steps.flow import (
     process_step_answer,
     analyze_problem_with_llm,
 )
-from bot.services.llm import llm_supplement_analysis
+from bot.services.llm import llm_generate_analysis_diagram, llm_supplement_analysis
 from bot.utils.file_extract import extract_text_from_bytes
+from bot.utils.format import format_analysis_text
 from bot.utils.reply import reply_with_photo
 
 
@@ -55,8 +56,34 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 pass
         return
 
-    # «Начать сначала», «Справка» — сброс в шаг 1
-    if text in ("Начать сначала", "Справка"):
+    # Шаг 2_result: кнопка «Сделать диаграмму решений» — генерация схемы проблем↔решения
+    if step == "2_result" and text == "Сделать диаграмму решений":
+        analysis_result = state.get("analysis_result", "")
+        if analysis_result:
+            status_msg = await update.message.reply_text("Генерирую диаграмму…")
+            diagram, err_msg = await llm_generate_analysis_diagram(analysis_result)
+            await status_msg.delete()
+            if diagram:
+                await update.message.reply_photo(photo=diagram, caption="Связь между проблемами и вариантами решений")
+            else:
+                msg = err_msg or "Не удалось сгенерировать диаграмму."
+                await reply_with_photo(
+                    update,
+                    f"Не удалось сгенерировать диаграмму.\n\n{msg}",
+                    "2_result",
+                    get_step_keyboard("2_result"),
+                )
+        else:
+            await reply_with_photo(
+                update,
+                "Сначала получите анализ проблемы.",
+                "2_result",
+                get_step_keyboard("2_result"),
+            )
+        return
+
+    # «Начать сначала», «В главное меню», «Справка» — сброс в шаг 1
+    if text in ("Начать сначала", "В главное меню", "Справка"):
         state["step"] = "1"
         state["scenario"] = None
         state["data"] = {}
@@ -78,7 +105,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         new_state["analysis_result"] = analysis_text
         set_state(user_id, new_state)
         kb = get_step_keyboard("2_result")
-        await reply_with_photo(update, analysis_text, "2_result", kb)
+        await reply_with_photo(update, analysis_text, "2_result", kb, parse_mode="HTML")
         return
 
     # Шаг 2_extra_result: дополнительная аналитика по запросу пользователя
@@ -91,11 +118,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         request = new_state.get("extra_request", "")
         supplement = await llm_supplement_analysis(data_text, original, request)
         if supplement:
-            msg = f"📊 Дополнительная аналитика\n\n{supplement}"
+            msg = format_analysis_text(f"**Дополнительная аналитика**\n\n{supplement}")
         else:
             msg = "Не удалось выполнить дополнительный анализ (проверьте OPENAI_API_KEY)."
         kb = get_step_keyboard("2_extra_result")
-        await reply_with_photo(update, msg, "2_extra_result", kb)
+        await reply_with_photo(update, msg, "2_extra_result", kb, parse_mode="HTML")
         return
 
     # Переход в шаг 1 (меню)
@@ -108,10 +135,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Обычный переход на следующий шаг
     msg = get_step_message(next_step, new_state)
     kb = get_step_keyboard(next_step)
-    if msg:
-        await reply_with_photo(update, msg, next_step, kb)
-    else:
-        await update.message.reply_text("Продолжаем.", reply_markup=kb)
+    await reply_with_photo(update, msg or "Продолжаем.", next_step, kb)
 
 
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -141,7 +165,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning("Failed to download document: %s", e)
-        await update.message.reply_text("Не удалось загрузить файл. Попробуйте другой формат (TXT, PDF).")
+        await reply_with_photo(update, "Не удалось загрузить файл. Попробуйте другой формат (TXT, PDF).", "2_upload")
         return
 
     text = extract_text_from_bytes(data, doc.file_name)
@@ -157,11 +181,13 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         state["analysis_result"] = analysis_text
         set_state(user_id, state)
         kb = get_step_keyboard("2_result")
-        await reply_with_photo(update, analysis_text, "2_result", kb)
+        await reply_with_photo(update, analysis_text, "2_result", kb, parse_mode="HTML")
     else:
-        await update.message.reply_text(
+        await reply_with_photo(
+            update,
             "Не удалось извлечь текст из файла. Поддерживаются: TXT, MD, PDF, DOC, DOCX, XLS, XLSX. "
             "Или вставьте текст в сообщение.",
+            "2_upload",
         )
 
 
@@ -192,7 +218,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning("Failed to download photo: %s", e)
-        await update.message.reply_text("Не удалось загрузить фото.")
+        await reply_with_photo(update, "Не удалось загрузить фото.", "2_upload")
         return
 
     try:
@@ -211,13 +237,15 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             state["analysis_result"] = analysis_text
             set_state(user_id, state)
             kb = get_step_keyboard("2_result")
-            await reply_with_photo(update, analysis_text, "2_result", kb)
+            await reply_with_photo(update, analysis_text, "2_result", kb, parse_mode="HTML")
         else:
-            await update.message.reply_text(
+            await reply_with_photo(
+                update,
                 "Не удалось распознать изображение (проверьте OPENAI_API_KEY). "
                 "Попробуйте отправить текст или документ.",
+                "2_upload",
             )
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning("Photo analysis failed: %s", e)
-        await update.message.reply_text("Ошибка при обработке фото. Попробуйте текст или документ.")
+        await reply_with_photo(update, "Ошибка при обработке фото. Попробуйте текст или документ.", "2_upload")

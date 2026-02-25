@@ -2,7 +2,7 @@
 from telegram import Update
 from telegram.ext import Application, CommandHandler, MessageHandler, filters
 
-from bot.config.settings import BOT_TOKEN
+from bot.config.settings import BOT_TOKEN, LLM_API_KEY
 from bot.handlers import commands, messages
 from bot.utils.logger import get_logger
 
@@ -35,7 +35,14 @@ def main() -> None:
 
     # Запускаем бота
     logger.info("Бот запущен...")
-    application.run_polling(allowed_updates=Update.ALL_TYPES)
+    if not LLM_API_KEY or LLM_API_KEY.strip() in ("your_llm_api_key_here", "sk-your_openai_api_key_here"):
+        logger.warning("LLM_API_KEY не задан — диаграммы и анализ через LLM недоступны")
+    else:
+        logger.info("LLM_API_KEY загружен (диаграммы и анализ доступны)")
+    application.run_polling(
+        allowed_updates=Update.ALL_TYPES,
+        drop_pending_updates=True,
+    )
 
 
 if __name__ == "__main__":

@@ -8,21 +8,85 @@ from bot.config.settings import LLM_API_KEY
 logger = logging.getLogger(__name__)
 
 
+async def llm_generate_analysis_diagram(analysis_text: str) -> tuple[Optional[bytes], Optional[str]]:
+    """
+    Генерирует схему сопоставления проблем и решений через DALL-E 3.
+    Возвращает (bytes изображения или None, сообщение об ошибке или None).
+    """
+    _placeholders = ("your_llm_api_key_here", "sk-your_openai_api_key_here")
+    if not LLM_API_KEY or LLM_API_KEY.strip() in _placeholders:
+        return None, (
+            "В .env не задан OPENAI_API_KEY или LLM_API_KEY. "
+            "Добавьте ключ: https://platform.openai.com/api-keys"
+        )
+
+    try:
+        # Краткое описание для промпта DALL-E (до 1000 символов)
+        dalle_prompt = (
+            "Professional flowchart diagram, business infographic style. "
+            "Left column: problem boxes. Right column: solution boxes. "
+            "Arrows connecting each problem to its corresponding solution. "
+            "Clean, minimal design, suitable for presentation. "
+            "No text labels in the image."
+        )
+        if len(analysis_text) > 200:
+            # Добавляем контекст из анализа (первые 300 символов для контекста)
+            summary = analysis_text[:300].replace("*", "").replace("\n", " ")
+            dalle_prompt = (
+                "Professional flowchart diagram showing problem-solution mapping. "
+                "Left side: problem areas. Right side: solution options. "
+                "Arrows from each problem to its solution. "
+                "Business infographic, clean minimal style. No text in image."
+            )
+
+        from openai import AsyncOpenAI
+
+        client = AsyncOpenAI(api_key=LLM_API_KEY)
+        response = await client.images.generate(
+            model="dall-e-3",
+            prompt=dalle_prompt[:1000],
+            size="1024x1024",
+            quality="standard",
+            n=1,
+            response_format="b64_json",
+        )
+        img = response.data[0]
+        b64_data = getattr(img, "b64_json", None)
+        if not b64_data:
+            return None, "OpenAI не вернул данные изображения"
+
+        return base64.standard_b64decode(b64_data), None
+    except Exception as e:
+        err = str(e).lower()
+        logger.warning("Diagram generation failed: %s", e)
+        if "invalid" in err or "authentication" in err or "api_key" in err:
+            return None, "Неверный OPENAI_API_KEY. Проверьте ключ в .env"
+        if "quota" in err or "insufficient" in err or "billing" in err:
+            return None, "Исчерпан лимит или нет оплаты на аккаунте OpenAI"
+        if "content" in err or "policy" in err:
+            return None, "Контент отклонён политикой OpenAI"
+        return None, f"Ошибка: {str(e)[:100]}"
+
+
 async def llm_analyze_problem(data_text: str) -> Optional[str]:
     """
-    Анализ данных: выявить проблемы с командой и варианты решений.
+    Анализ данных: выявить 3–10 проблем и 5–12 решений.
+    Без смайликов, без ### и ---. Названия блоков выделить жирным (**текст**).
     """
     system = (
         "Ты — эксперт по аналитике процессов и команд. "
-        "Проанализируй предоставленные данные (схему процесса, результаты интервью) и структурируй ответ:\n\n"
-        "1. **Проблемы с командой** — что не работает, какие симптомы, противоречия\n"
-        "2. **Варианты решений** — конкретные рекомендации по улучшению\n\n"
-        "Пиши кратко, по пунктам. Язык — русский."
+        "Проанализируй данные (схему процесса, результаты интервью) и структурируй ответ.\n\n"
+        "Формат (без смайликов, без ###, без ---):\n\n"
+        "**Проблемы с командой**\n"
+        "Выяви от 3 до 10 проблем. Каждую проблему — на отдельной строке, одна под другой. Кратко, по сути.\n\n"
+        "**Варианты решений**\n"
+        "Предложи от 5 до 12 конкретных решений. Каждое решение — на отдельной строке, одно под другим. Кратко, по пунктам.\n\n"
+        "Используй только ** для выделения названий блоков. Язык — русский."
     )
     return await llm_generate(
         f"Данные для анализа:\n\n{data_text}",
         system_prompt=system,
-        max_tokens=2000,
+        max_tokens=2500,
     )
 
 
@@ -34,7 +98,8 @@ async def llm_supplement_analysis(data_text: str, original_analysis: str, user_r
         "Ты — эксперт по аналитике процессов и команд. "
         "Пользователь уже получил первичный анализ. Теперь он просит дополнительную аналитику. "
         "На основе исходных данных и имеющегося анализа дай углублённый разбор по запрошенному аспекту. "
-        "Структурируй ответ кратко, по пунктам. Язык — русский."
+        "Структурируй ответ: каждый пункт — на отдельной строке, один под другим. Без ###, без ---, без смайликов. "
+        "Заголовки выделяй жирным: **Заголовок**. Язык — русский."
     )
     prompt = (
         f"Исходные данные:\n\n{data_text[:6000]}\n\n"
