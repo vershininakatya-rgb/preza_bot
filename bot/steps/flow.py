@@ -1,7 +1,16 @@
 """Определение шагов, текстов и переходов. Сценарий: Анализ проблемы."""
 from typing import Optional
-from telegram import ReplyKeyboardMarkup
-from bot.keyboards import keyboard_step1, keyboard_help_only, keyboard_two, keyboard_choice
+from telegram import InlineKeyboardMarkup, ReplyKeyboardMarkup
+from bot.keyboards import (
+    keyboard_help_only,
+    keyboard_step1,
+    keyboard_two,
+    keyboard_choice,
+    inline_step1,
+    inline_step2_result,
+    inline_step2_extra_result,
+    inline_step0H_3,
+)
 
 
 def get_step_message(step: str, state: Optional[dict] = None) -> str:
@@ -26,7 +35,11 @@ def get_step_message(step: str, state: Optional[dict] = None) -> str:
             "Отправьте файл (фото, PDF, DOC, DOCX, XLS, XLSX, TXT) или напишите текст — анализ запустится сразу."
         ),
         "2_result": "",  # Заполняется LLM
-        "2_extra_ask": "Что именно вы хотите получить в дополнительной аналитике? Опишите в свободной форме.",
+        "2_extra_ask": (
+            "Что именно вы хотите получить в дополнительной аналитике? Опишите в свободной форме.\n\n"
+            "Ответы формируются с учётом материалов из базы знаний (Kanban, OKR, ADKAR, кейсы). "
+            "Можно задать вопросы по методологиям, метрикам, управлению изменениями."
+        ),
         "2_extra_result": "",  # Заполняется LLM
         "0H_1": "Опишите, какая вам нужна помощь (в свободной форме).",
         "0H_3": "Ваш запрос передан. С вами свяжутся.\n\nВернуться в диалог или в главное меню?",
@@ -54,6 +67,19 @@ def get_step_keyboard(step: str) -> Optional[ReplyKeyboardMarkup]:
     return keyboard_help_only()
 
 
+def get_step_inline_keyboard(step: str) -> Optional[InlineKeyboardMarkup]:
+    """Inline-клавиатура для шага (для сообщений с кнопками под текстом)."""
+    if step == "1":
+        return inline_step1()
+    if step == "2_result":
+        return inline_step2_result()
+    if step == "2_extra_result":
+        return inline_step2_extra_result()
+    if step == "0H_3":
+        return inline_step0H_3()
+    return None
+
+
 def process_step_answer(step: str, text: str, state: dict) -> tuple[str, dict]:
     """
     Обработать ответ пользователя. Возвращает (next_step, updated_state).
@@ -66,6 +92,7 @@ def process_step_answer(step: str, text: str, state: dict) -> tuple[str, dict]:
         state["scenario"] = None
         state["data"] = {}
         state["analysis_result"] = None
+        state["extra_result"] = None
         state["extra_request"] = None
         state["return_after_help"] = None
         return "1", state

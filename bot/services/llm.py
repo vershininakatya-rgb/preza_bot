@@ -97,7 +97,11 @@ async def llm_analyze_problem(data_text: str) -> Optional[str]:
         "Используй только ** для выделения названий блоков. Язык — русский."
     )
     if rag_context:
-        system += f"\n\n---\nРелевантные материалы из базы знаний (используй при анализе):\n\n{rag_context}"
+        system += (
+            "\n\n---\nРелевантные материалы из базы знаний (RAG). "
+            "Используй эти материалы при анализе. Опирайся на релевантные фрагменты.\n\n"
+            f"{rag_context}"
+        )
 
     return await llm_generate(
         f"Данные для анализа:\n\n{data_text}",
@@ -129,7 +133,12 @@ async def llm_supplement_analysis(data_text: str, original_analysis: str, user_r
         "Заголовки выделяй жирным: **Заголовок**. Язык — русский."
     )
     if rag_context:
-        system += f"\n\n---\nРелевантные материалы из базы знаний:\n\n{rag_context}"
+        system += (
+            "\n\n---\nРелевантные материалы из базы знаний (RAG). "
+            "Приоритетно используй эти материалы при формулировании ответа. "
+            "Опирайся на релевантные фрагменты, цитируй ключевые идеи.\n\n"
+            f"{rag_context}"
+        )
 
     prompt = (
         f"Исходные данные:\n\n{data_text[:6000]}\n\n"

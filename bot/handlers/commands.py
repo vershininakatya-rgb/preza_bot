@@ -3,7 +3,7 @@ from telegram import Update
 from telegram.ext import ContextTypes
 
 from bot.storage import get_state, clear_state
-from bot.steps.flow import get_step_message, get_step_keyboard
+from bot.steps.flow import get_step_message, get_step_keyboard, get_step_inline_keyboard
 from bot.utils.reply import reply_with_photo
 
 
@@ -16,13 +16,20 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     in_flow = step != "1" or bool(state.get("data"))
     if in_flow:
         msg = get_step_message(step, state)
-        kb = get_step_keyboard(step)
-        await reply_with_photo(update, msg, step, kb)
+        parse_mode = "Markdown"
+        if step == "2_result" and state.get("analysis_result"):
+            msg = state["analysis_result"]
+            parse_mode = "HTML"
+        elif step == "2_extra_result" and state.get("extra_result"):
+            msg = state["extra_result"]
+            parse_mode = "HTML"
+        kb = get_step_inline_keyboard(step) or get_step_keyboard(step)
+        await reply_with_photo(update, msg, step, kb, parse_mode=parse_mode)
         return
     clear_state(user_id)
     state = get_state(user_id)
     msg = get_step_message("1")
-    kb = get_step_keyboard("1")
+    kb = get_step_inline_keyboard("1") or get_step_keyboard("1")
     await reply_with_photo(update, msg, "1", kb)
 
 
@@ -40,7 +47,7 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     clear_state(user_id)
     state = get_state(user_id)
     msg = get_step_message("1")
-    kb = get_step_keyboard("1")
+    kb = get_step_inline_keyboard("1") or get_step_keyboard("1")
     await reply_with_photo(update, msg, "1", kb)
 
 

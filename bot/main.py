@@ -1,6 +1,6 @@
 """Главный файл запуска Telegram бота."""
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters
+from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
 
 from bot.config.settings import BOT_TOKEN, LLM_API_KEY
 from bot.handlers import commands, messages
@@ -19,7 +19,8 @@ def main() -> None:
     application.add_handler(CommandHandler("start", commands.start_command))
     application.add_handler(CommandHandler("help", commands.help_command))
 
-    # Регистрируем обработчики сообщений
+    # Регистрируем обработчики
+    application.add_handler(CallbackQueryHandler(messages.handle_callback))
     application.add_handler(
         MessageHandler(filters.TEXT & ~filters.COMMAND, messages.handle_message)
     )
