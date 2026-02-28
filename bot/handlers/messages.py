@@ -11,7 +11,7 @@ from bot.steps.flow import (
     process_step_answer,
     analyze_problem_with_llm,
 )
-from bot.services.llm import llm_generate_analysis_diagram, llm_supplement_analysis
+from bot.services.llm import llm_supplement_analysis
 from bot.utils.file_extract import extract_text_from_bytes
 from bot.utils.format import format_analysis_text
 from bot.utils.reply import reply_with_photo
@@ -56,30 +56,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 pass
         return
 
-    # Шаг 2_result: кнопка «Сделать диаграмму решений» — генерация схемы проблем↔решения
+    # Шаг 2_result: устаревшая кнопка «Сделать диаграмму решений» — отправить обновлённую клавиатуру
     if step == "2_result" and text == "Сделать диаграмму решений":
-        analysis_result = state.get("analysis_result", "")
-        if analysis_result:
-            status_msg = await update.message.reply_text("Генерирую диаграмму…")
-            diagram, err_msg = await llm_generate_analysis_diagram(analysis_result)
-            await status_msg.delete()
-            if diagram:
-                await update.message.reply_photo(photo=diagram, caption="Связь между проблемами и вариантами решений")
-            else:
-                msg = err_msg or "Не удалось сгенерировать диаграмму."
-                await reply_with_photo(
-                    update,
-                    f"Не удалось сгенерировать диаграмму.\n\n{msg}",
-                    "2_result",
-                    get_step_keyboard("2_result"),
-                )
-        else:
-            await reply_with_photo(
-                update,
-                "Сначала получите анализ проблемы.",
-                "2_result",
-                get_step_keyboard("2_result"),
-            )
+        kb = get_step_keyboard("2_result")
+        await reply_with_photo(
+            update,
+            "Генерация диаграммы временно отключена. Выберите другую опцию.",
+            "2_result",
+            kb,
+        )
         return
 
     # «Начать сначала», «В главное меню», «Справка» — сброс в шаг 1

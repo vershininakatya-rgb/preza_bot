@@ -42,7 +42,7 @@ def get_step_keyboard(step: str) -> Optional[ReplyKeyboardMarkup]:
         return keyboard_help_only()
     if step == "2_result":
         return keyboard_choice([
-            ["Сделать диаграмму решений", "Нужна дополнительная аналитика"],
+            ["Нужна дополнительная аналитика"],
             ["Начать сначала"],
         ])
     if step == "2_extra_ask":

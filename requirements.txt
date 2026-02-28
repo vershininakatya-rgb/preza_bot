@@ -5,3 +5,7 @@ pypdf>=4.0
 python-docx>=1.0
 openpyxl>=3.0
 xlrd>=2.0
+# RAG с PostgreSQL
+psycopg[binary]>=3.1
+asyncpg>=0.29
+pgvector>=0.2

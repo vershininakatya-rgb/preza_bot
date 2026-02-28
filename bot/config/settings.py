@@ -14,6 +14,13 @@ LLM_API_KEY = os.getenv('LLM_API_KEY') or os.getenv('OPENAI_API_KEY')
 # Chat ID администратора для уведомлений «Нужна помощь» (опционально)
 ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID')
 
+# RAG (PostgreSQL + pgvector)
+DATABASE_URL = os.getenv('DATABASE_URL')
+RAG_ENABLED = os.getenv('RAG_ENABLED', 'false').lower() == 'true'
+RAG_TOP_K = int(os.getenv('RAG_TOP_K', '5'))
+RAG_EMBEDDING_MODEL = os.getenv('RAG_EMBEDDING_MODEL', 'text-embedding-3-small')
+RAG_EMBEDDING_DIM = 1536  # для text-embedding-3-small
+
 # Настройки логирования
 DEBUG = os.getenv('DEBUG', 'False').lower() == 'true'
 LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')

@@ -3,7 +3,7 @@ import base64
 import logging
 from typing import Optional
 
-from bot.config.settings import LLM_API_KEY
+from bot.config.settings import LLM_API_KEY, RAG_ENABLED
 
 logger = logging.getLogger(__name__)
 
@@ -73,8 +73,21 @@ async def llm_analyze_problem(data_text: str) -> Optional[str]:
     Анализ данных: выявить 3–10 проблем и 5–12 решений.
     Без смайликов, без ### и ---. Названия блоков выделить жирным (**текст**).
     """
+    rag_context = ""
+    if RAG_ENABLED:
+        try:
+            from bot.services.rag import retrieve_relevant_chunks
+
+            rag_context = await retrieve_relevant_chunks(data_text)
+        except Exception as e:
+            logger.debug("RAG retrieval skipped: %s", e)
+
     system = (
         "Ты — эксперт по аналитике процессов и команд. "
+        "Используй данные в контексте методологий:\n"
+        "• Kanban — визуализация потока работ, ограничение WIP, непрерывное улучшение\n"
+        "• OKR (Objectives and Key Results) — цели и ключевые результаты для выравнивания и измерения\n"
+        "• Prosci ADKAR — управление изменениями: Awareness, Desire, Knowledge, Ability, Reinforcement\n\n"
         "Проанализируй данные (схему процесса, результаты интервью) и структурируй ответ.\n\n"
         "Формат (без смайликов, без ###, без ---):\n\n"
         "**Проблемы с командой**\n"
@@ -83,6 +96,9 @@ async def llm_analyze_problem(data_text: str) -> Optional[str]:
         "Предложи от 5 до 12 конкретных решений. Каждое решение — на отдельной строке, одно под другим. Кратко, по пунктам.\n\n"
         "Используй только ** для выделения названий блоков. Язык — русский."
     )
+    if rag_context:
+        system += f"\n\n---\nРелевантные материалы из базы знаний (используй при анализе):\n\n{rag_context}"
+
     return await llm_generate(
         f"Данные для анализа:\n\n{data_text}",
         system_prompt=system,
@@ -94,13 +110,27 @@ async def llm_supplement_analysis(data_text: str, original_analysis: str, user_r
     """
     Дополнительная аналитика: углублённый разбор по запросу пользователя.
     """
+    rag_context = ""
+    if RAG_ENABLED:
+        try:
+            from bot.services.rag import retrieve_relevant_chunks
+
+            query = f"{user_request}\n{original_analysis[:500]}"
+            rag_context = await retrieve_relevant_chunks(query)
+        except Exception as e:
+            logger.debug("RAG retrieval skipped: %s", e)
+
     system = (
         "Ты — эксперт по аналитике процессов и команд. "
+        "Используй методологии: Kanban (поток работ, WIP), OKR (цели и ключевые результаты), Prosci ADKAR (управление изменениями). "
         "Пользователь уже получил первичный анализ. Теперь он просит дополнительную аналитику. "
         "На основе исходных данных и имеющегося анализа дай углублённый разбор по запрошенному аспекту. "
         "Структурируй ответ: каждый пункт — на отдельной строке, один под другим. Без ###, без ---, без смайликов. "
         "Заголовки выделяй жирным: **Заголовок**. Язык — русский."
     )
+    if rag_context:
+        system += f"\n\n---\nРелевантные материалы из базы знаний:\n\n{rag_context}"
+
     prompt = (
         f"Исходные данные:\n\n{data_text[:6000]}\n\n"
         f"---\nПервичный анализ:\n\n{original_analysis[:3000]}\n\n"
