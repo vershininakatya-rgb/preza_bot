@@ -14,6 +14,13 @@ LLM_API_KEY = os.getenv('LLM_API_KEY') or os.getenv('OPENAI_API_KEY')
 # Chat ID администратора для уведомлений «Нужна помощь» (опционально)
 ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID')
 
+# Email для запросов помощи (опционально; нужен SMTP для отправки)
+HELP_EMAIL = os.getenv('HELP_EMAIL', 'vershinina.katya@gmail.com')
+SMTP_HOST = os.getenv('SMTP_HOST')
+SMTP_PORT = int(os.getenv('SMTP_PORT') or 587)
+SMTP_USER = os.getenv('SMTP_USER')
+SMTP_PASSWORD = os.getenv('SMTP_PASSWORD')
+
 # RAG (PostgreSQL + pgvector)
 DATABASE_URL = os.getenv('DATABASE_URL')
 RAG_ENABLED = os.getenv('RAG_ENABLED', 'false').lower() == 'true'

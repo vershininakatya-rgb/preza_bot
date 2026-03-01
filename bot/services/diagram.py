@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 
 KROKI_URL = "https://kroki.io"
 
-# Пример дерева решений (fallback, если LLM недоступен или вернул невалидный код)
+# Пример дерева решений (fallback при сбое LLM)
 EXAMPLE_MERMAID = """
 flowchart TD
     root[Анализ проблемы] --> p1[Низкая прозрачность потока]
@@ -95,9 +95,7 @@ def _strip_html(text: str) -> str:
 async def generate_decision_tree_diagram(analysis_text: str) -> tuple[Optional[bytes], Optional[str]]:
     """
     Генерирует PNG-диаграмму дерева решений из текста анализа.
-    Использует LLM для преобразования в Mermaid и Kroki для рендеринга.
-    При сбое LLM или отсутствии ключа возвращает пример диаграммы.
-    Возвращает (bytes изображения, None) или (None, сообщение об ошибке).
+    LLM → Mermaid → Kroki. При сбое LLM — пример диаграммы.
     """
     plain = _strip_html(analysis_text or "")
 
@@ -109,7 +107,7 @@ async def generate_decision_tree_diagram(analysis_text: str) -> tuple[Optional[b
                 if not err:
                     return img_bytes, None
 
-    # Fallback: пример дерева решений (если LLM недоступен или вернул невалидный код)
+    # Fallback: пример дерева решений
     img_bytes, err = await kroki_render_mermaid(EXAMPLE_MERMAID.strip())
     if err:
         return None, err or "Не удалось сгенерировать диаграмму."
