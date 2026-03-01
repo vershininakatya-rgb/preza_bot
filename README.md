@@ -58,9 +58,12 @@ SMTP_PASSWORD=пароль_приложения_google
 
 ## Запуск
 
+Локально:
 ```bash
 python run.py
 ```
+
+**Деплой 24/7 (Railway)** — пошаговая инструкция для продакта: [docs/DEPLOY_RAILWAY.md](docs/DEPLOY_RAILWAY.md).
 
 ## Структура проекта
 
