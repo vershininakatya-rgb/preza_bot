@@ -48,7 +48,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await reply_with_photo(update, msg, "0H_1", kb)
         return
 
-    # Шаг 0H_1: пользователь написал, что ему нужна помощь — отправка в ваш Telegram и переход в 0H_3
+    # Шаг 0H_1: пользователь написал, что ему нужна помощь — только в личку админу (ADMIN_CHAT_ID), в чате пользователя не показываем
     if step == "0H_1":
         state["step"] = "0H_3"
         set_state(user_id, state)
@@ -64,6 +64,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                     f"Кто: {user.full_name} (@{user.username or '—'}), id={user_id}\n\n"
                     f"Текст: {text}"
                 )
+                # Только в личные сообщения админа (chat_id пользователя), не в общий чат
                 await context.bot.send_message(chat_id=admin_id, text=admin_msg)
             except Exception:
                 pass

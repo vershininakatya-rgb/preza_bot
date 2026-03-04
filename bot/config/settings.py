@@ -11,8 +11,8 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 # LLM API Key (опционально; нужен для анализа). Поддерживаются LLM_API_KEY и OPENAI_API_KEY
 LLM_API_KEY = os.getenv('LLM_API_KEY') or os.getenv('OPENAI_API_KEY')
 
-# Chat ID, куда приходят запросы «Нужна помощь» (ваш Telegram; опционально)
-# Узнать свой chat_id: написать боту @userinfobot или посмотреть в логах при первом сообщении
+# Chat ID для личных сообщений: сюда приходят запросы «Нужна помощь» только в личку, не в чат пользователя
+# Укажите свой числовой chat_id (например, для @over_chernova). Узнать: @userinfobot в Telegram
 ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID')
 
 # RAG (PostgreSQL + pgvector)
