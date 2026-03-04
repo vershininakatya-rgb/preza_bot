@@ -15,6 +15,10 @@ LLM_API_KEY = os.getenv('LLM_API_KEY') or os.getenv('OPENAI_API_KEY')
 # Укажите свой числовой chat_id (например, для @over_chernova). Узнать: @userinfobot в Telegram
 ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID')
 
+# Chat ID для логов мониторинга (опционально). Если не задан — определяется при /start в группе/канале
+LOG_CHAT_ID = os.getenv('LOG_CHAT_ID')
+LOG_CHAT_ID_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'log_chat_id.txt')
+
 # RAG (PostgreSQL + pgvector)
 DATABASE_URL = os.getenv('DATABASE_URL')
 RAG_ENABLED = os.getenv('RAG_ENABLED', 'false').lower() == 'true'
@@ -29,3 +33,28 @@ LOG_LEVEL = os.getenv('LOG_LEVEL', 'INFO')
 # Проверка наличия обязательных переменных
 if not BOT_TOKEN:
     raise ValueError("BOT_TOKEN не установлен! Проверьте файл .env")
+
+
+def get_log_chat_id() -> str | None:
+    """Chat ID для отправки логов мониторинга: из env или из файла."""
+    if LOG_CHAT_ID and str(LOG_CHAT_ID).strip():
+        return str(LOG_CHAT_ID).strip()
+    if os.path.isfile(LOG_CHAT_ID_FILE):
+        try:
+            with open(LOG_CHAT_ID_FILE, 'r', encoding='utf-8') as f:
+                value = f.read().strip()
+            if value:
+                return value
+        except OSError:
+            pass
+    return None
+
+
+def set_log_chat_id(chat_id: int | str) -> None:
+    """Сохранить chat_id чата для логов в файл."""
+    path = LOG_CHAT_ID_FILE
+    dirpath = os.path.dirname(path)
+    if dirpath and not os.path.isdir(dirpath):
+        os.makedirs(dirpath, exist_ok=True)
+    with open(path, 'w', encoding='utf-8') as f:
+        f.write(str(chat_id))

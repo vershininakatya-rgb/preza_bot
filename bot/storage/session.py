@@ -15,6 +15,7 @@ def get_state(user_id: int) -> dict[str, Any]:
             "context": {},
             "data": {},
             "return_after_help": None,
+            "step_entered_at": None,
         }
     return _user_states[user_id]
 

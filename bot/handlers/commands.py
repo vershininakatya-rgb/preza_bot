@@ -1,20 +1,42 @@
 """Обработчики команд бота."""
+import time
 from telegram import Update
 from telegram.ext import ContextTypes
 
-from bot.storage import get_state, clear_state
+from bot.config.settings import get_log_chat_id, set_log_chat_id
+from bot.storage import get_state, set_state, clear_state
 from bot.steps.flow import get_step_message, get_step_keyboard, get_step_inline_keyboard
+from bot.utils.monitoring import log_activity, send_activity_to_telegram
 from bot.utils.reply import reply_with_photo
+
+
+def _duration_sec(state: dict) -> float | None:
+    t = state.get("step_entered_at")
+    if t is None:
+        return None
+    return time.time() - t
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команды /start — сброс сессии и показ шага 1."""
+    chat = update.effective_chat
+    if chat and chat.type in ("group", "supergroup", "channel") and get_log_chat_id() is None:
+        set_log_chat_id(chat.id)
+        await send_activity_to_telegram(
+            context.bot,
+            f"Этот чат выбран для логов мониторинга. Chat ID: {chat.id}",
+        )
+        return
+
     user_id = update.effective_user.id
+    user = update.effective_user
     state = get_state(user_id)
     # Если пользователь в процессе сценария — не сбрасывать (Telegram может слать /start при открытии чата)
     step = state.get("step", "1")
+    duration = _duration_sec(state)
     in_flow = step != "1" or bool(state.get("data"))
     if in_flow:
+        log_activity(context.bot, user, "команда /start", step, step, duration, None)
         msg = get_step_message(step, state)
         parse_mode = "Markdown"
         if step == "2_result" and state.get("analysis_result"):
@@ -26,8 +48,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         kb = get_step_inline_keyboard(step) or get_step_keyboard(step)
         await reply_with_photo(update, msg, step, kb, parse_mode=parse_mode)
         return
+    log_activity(context.bot, user, "команда /start", step, "1", duration, None)
     clear_state(user_id)
     state = get_state(user_id)
+    state["step_entered_at"] = time.time()
+    set_state(user_id, state)
     msg = get_step_message("1")
     kb = get_step_inline_keyboard("1") or get_step_keyboard("1")
     await reply_with_photo(update, msg, "1", kb)
@@ -35,6 +60,13 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик команды /help — справка и переход в меню."""
+    user_id = update.effective_user.id
+    user = update.effective_user
+    state = get_state(user_id)
+    step = state.get("step", "1")
+    duration = _duration_sec(state)
+    log_activity(context.bot, user, "команда /help", step, "1", duration, None)
+
     help_text = (
         "📋 Доступные команды:\n\n"
         "/start — Начать работу с ботом (сброс и главное меню)\n"
@@ -43,9 +75,10 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     )
     await reply_with_photo(update, help_text, "1")
     # Переход в меню как при /start
-    user_id = update.effective_user.id
     clear_state(user_id)
     state = get_state(user_id)
+    state["step_entered_at"] = time.time()
+    set_state(user_id, state)
     msg = get_step_message("1")
     kb = get_step_inline_keyboard("1") or get_step_keyboard("1")
     await reply_with_photo(update, msg, "1", kb)

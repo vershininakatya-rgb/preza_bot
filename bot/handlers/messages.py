@@ -1,5 +1,6 @@
 """Обработчики сообщений бота."""
 import io
+import time
 from telegram import Update
 from telegram.ext import ContextTypes
 
@@ -27,21 +28,33 @@ from bot.services.llm import llm_supplement_analysis
 from bot.utils.file_extract import extract_text_from_bytes
 from bot.utils.format import format_analysis_text
 from bot.services.diagram import generate_decision_tree_diagram
+from bot.utils.monitoring import log_activity
 from bot.utils.reply import reply_with_photo
+
+
+def _duration_sec(state: dict) -> float | None:
+    t = state.get("step_entered_at")
+    if t is None:
+        return None
+    return time.time() - t
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик текстовых сообщений — маршрутизация по шагам."""
     user_id = update.effective_user.id
+    user = update.effective_user
     text = (update.message.text or "").strip()
 
     state = get_state(user_id)
     step = state.get("step", "1")
+    duration = _duration_sec(state)
 
     # «Нужна помощь» — переход в шаг 0H
     if text == "Нужна помощь":
+        log_activity(context.bot, user, "текст", step, "0H_1", duration, text[:100] if text else None)
         state["return_after_help"] = step
         state["step"] = "0H_1"
+        state["step_entered_at"] = time.time()
         set_state(user_id, state)
         msg = get_step_message("0H_1")
         kb = get_step_keyboard("0H_1")
@@ -50,7 +63,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     # Шаг 0H_1: пользователь написал, что ему нужна помощь — только в личку админу (ADMIN_CHAT_ID), в чате пользователя не показываем
     if step == "0H_1":
+        log_activity(context.bot, user, "текст", step, "0H_3", duration, text[:100] if text else None)
         state["step"] = "0H_3"
+        state["step_entered_at"] = time.time()
         set_state(user_id, state)
         msg = get_step_message("0H_3")
         kb = get_step_inline_keyboard("0H_3") or get_step_keyboard("0H_3")
@@ -73,12 +88,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     # «Начать сначала», «В главное меню», «Справка» — сброс в шаг 1
     if text in ("Начать сначала", "В главное меню", "Справка"):
+        log_activity(context.bot, user, "текст", step, "1", duration, text[:100] if text else None)
         state["step"] = "1"
         state["scenario"] = None
         state["data"] = {}
         state["analysis_result"] = None
         state["extra_result"] = None
         state["extra_request"] = None
+        state["step_entered_at"] = time.time()
         set_state(user_id, state)
         msg = get_step_message("1")
         kb = get_step_inline_keyboard("1") or get_step_keyboard("1")
@@ -87,6 +104,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
 
     # Обработка ответа по текущему шагу
     next_step, new_state = process_step_answer(step, text, state)
+    log_activity(context.bot, user, "текст", step, next_step, duration, text[:100] if text else None)
+    new_state["step_entered_at"] = time.time()
     set_state(user_id, new_state)
 
     # Шаг 2_result: показываем результат анализа (LLM)
@@ -124,7 +143,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await reply_with_photo(update, msg, "1", kb)
         return
 
-    # Обычный переход на следующий шаг
+    # Обычный переход на следующий шаг (2_upload, 2_extra_ask и т.д. — step_entered_at уже установлен выше)
     msg = get_step_message(next_step, new_state)
     kb = get_step_keyboard(next_step)
     await reply_with_photo(update, msg or "Продолжаем.", next_step, kb)
@@ -151,11 +170,14 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         return
     data = query.data
     user_id = update.effective_user.id
+    user = update.effective_user
     state = get_state(user_id)
     step = state.get("step", "1")
+    duration = _duration_sec(state)
 
     # «Сделать диаграмму решений» — генерация через Kroki
     if data == CB_STEP2_RESULT_DIAGRAM and step == "2_result":
+        log_activity(context.bot, user, "кнопка", step, "2_result", duration, "Сделать диаграмму решений")
         analysis = state.get("analysis_result", "")
         img_bytes, err = await generate_decision_tree_diagram(analysis)
         message = query.message
@@ -179,8 +201,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # «Нужна помощь» — переход в шаг 0H
     if text == "Нужна помощь":
+        log_activity(context.bot, user, "кнопка", step, "0H_1", duration, text)
         state["return_after_help"] = step
         state["step"] = "0H_1"
+        state["step_entered_at"] = time.time()
         set_state(user_id, state)
         msg = get_step_message("0H_1")
         kb = get_step_keyboard("0H_1")  # 0H_1 — текст, без inline
@@ -189,6 +213,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # «Начать сначала», «В главное меню» — сброс в шаг 1
     if text in ("Начать сначала", "В главное меню"):
+        log_activity(context.bot, user, "кнопка", step, "1", duration, text)
         state["step"] = "1"
         state["scenario"] = None
         state["data"] = {}
@@ -196,6 +221,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         state["extra_result"] = None
         state["extra_request"] = None
         state["return_after_help"] = None
+        state["step_entered_at"] = time.time()
         set_state(user_id, state)
         msg = get_step_message("1")
         kb = get_step_inline_keyboard("1") or get_step_keyboard("1")
@@ -206,15 +232,19 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if step == "0H_3":
         if text == "Вернуться в диалог":
             prev = state.get("return_after_help") or "1"
+            log_activity(context.bot, user, "кнопка", step, prev, duration, text)
             state["return_after_help"] = None
             state["step"] = prev
+            state["step_entered_at"] = time.time()
             set_state(user_id, state)
             msg = get_step_message(prev)
             kb = get_step_inline_keyboard(prev) or get_step_keyboard(prev)
             await reply_with_photo(update, msg, prev, kb)
         else:
+            log_activity(context.bot, user, "кнопка", step, "1", duration, text)
             state["return_after_help"] = None
             state["step"] = "1"
+            state["step_entered_at"] = time.time()
             set_state(user_id, state)
             msg = get_step_message("1")
             kb = get_step_inline_keyboard("1") or get_step_keyboard("1")
@@ -223,6 +253,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 
     # Обработка через process_step_answer
     next_step, new_state = process_step_answer(step, text, state)
+    log_activity(context.bot, user, "кнопка", step, next_step, duration, text)
+    new_state["step_entered_at"] = time.time()
     set_state(user_id, new_state)
 
     if next_step == "2_result":
@@ -273,8 +305,10 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик документов — извлечение текста и добавление в данные."""
     user_id = update.effective_user.id
+    user = update.effective_user
     state = get_state(user_id)
     step = state.get("step", "1")
+    duration = _duration_sec(state)
 
     if step != "2_upload":
         await reply_with_photo(
@@ -307,7 +341,9 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         state["data"].setdefault("file_descriptions", []).append(
             f"[Файл: {doc.file_name}]\n{text[:8000]}"
         )
+        log_activity(context.bot, user, "файл", step, "2_result", duration, f"Файл: {doc.file_name}")
         state["step"] = "2_result"
+        state["step_entered_at"] = time.time()
         set_state(user_id, state)
         analysis_text = await analyze_problem_with_llm(state)
         state["analysis_result"] = analysis_text
@@ -326,8 +362,10 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
 async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обработчик фото — описание через Vision API и добавление в данные."""
     user_id = update.effective_user.id
+    user = update.effective_user
     state = get_state(user_id)
     step = state.get("step", "1")
+    duration = _duration_sec(state)
 
     if step != "2_upload":
         await reply_with_photo(
@@ -363,7 +401,9 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             state["data"].setdefault("file_descriptions", []).append(
                 f"[Описание схемы/диаграммы]\n{description}"
             )
+            log_activity(context.bot, user, "фото", step, "2_result", duration, None)
             state["step"] = "2_result"
+            state["step_entered_at"] = time.time()
             set_state(user_id, state)
             analysis_text = await analyze_problem_with_llm(state)
             state["analysis_result"] = analysis_text
