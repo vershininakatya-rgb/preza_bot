@@ -66,8 +66,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 )
                 # Только в личные сообщения админа (chat_id пользователя), не в общий чат
                 await context.bot.send_message(chat_id=admin_id, text=admin_msg)
-            except Exception:
-                pass
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning("ADMIN_CHAT_ID invalid or send failed: %s", e)
         return
 
     # «Начать сначала», «В главное меню», «Справка» — сброс в шаг 1
@@ -146,6 +147,8 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     """Обработчик нажатий inline-кнопок."""
     query = update.callback_query
     await query.answer()
+    if not getattr(query, "data", None):
+        return
     data = query.data
     user_id = update.effective_user.id
     state = get_state(user_id)

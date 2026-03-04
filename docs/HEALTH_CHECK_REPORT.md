@@ -1,147 +1,93 @@
-# Health Check Report — preza_bot
+# Health-check report: preza_bot
 
-**Дата:** 2026-02-22
+## Summary
 
----
-
-## 1. Архитектура
-
-### 1.1 Несоответствие документации и кода
-
-**ARCHITECTURE.md** и **README.md** описывают старую структуру. В коде есть модули, которых нет в документации:
-
-| В коде | В ARCHITECTURE.md |
-|--------|-------------------|
-| `bot/storage/` (session.py) | ❌ Нет |
-| `bot/steps/` (flow.py) | ❌ Нет |
-| `bot/keyboards.py` | ❌ Нет |
-| `bot/services/` (llm.py) | ❌ Нет |
-
-**Рекомендация:** Обновить ARCHITECTURE.md и README.md под текущую структуру.
-
-### 1.2 Поток данных
-
-Реальный поток:
-```
-Telegram API → main.py → handlers → storage (state) + steps (flow) + keyboards
-                                    ↓
-                              services/llm (при шаге 6)
-                                    ↓
-                              Response → Telegram API
-```
+| Area | Status | Notes |
+|------|--------|--------|
+| **Architecture** | Docs out of date | ARCHITECTURE.md и BOT_FLOW.md не совпадают с текущим сценарием (1 → 2_upload → 2_result → 2_extra_*). Код: storage, steps, keyboards, services — согласованы. |
+| **Bugs / risks** | Средний риск | Race при параллельных апдейтах; reply.py — нет проверки файла перед open(); LLM — нет проверки response.choices; callback — возможен краш при пустом query.data. |
+| **Dead code** | Есть | llm_generate_analysis_diagram (DALL-E) не используется; format_user_info в helpers не используется. |
+| **Config & env** | Ок | Конфиг из env; при ошибке int(ADMIN_CHAT_ID) — тихий pass. |
+| **Inconsistencies** | Есть | Дублирование логики в handle_message и handle_callback; смешение parse_mode (Markdown/HTML) — осознанное. |
+| **Tests / README** | Пробелы | Тестов нет; README устарел. |
 
 ---
 
-## 2. Баги и потенциальные ошибки
+## 1. Architecture
 
-### 2.1 error_handler: update может быть None
-
-**Файл:** `bot/handlers/commands.py`
-
-```python
-logger.error(f"Update {update} caused error {context.error}")
-```
-
-При ошибках во время polling (например, сетевой сбой) `update` может быть `None`. Обращение к `update` в f-string безопасно, но при попытке `update.effective_user` будет AttributeError. Сейчас такого обращения нет — риск низкий, но лучше явно обработать `update is None`.
-
-### 2.2 Шаг 0H_1: двойное сообщение
-
-**Файл:** `bot/handlers/messages.py` (строки 37–39)
-
-Бот отправляет два сообщения подряд:
-1. `get_step_message("0H_3")` — «Ваш запрос передан...»
-2. «Выберите:» + клавиатура
-
-Можно объединить в одно сообщение.
-
-### 2.3 Широкий except в build_analytics_tree_with_llm
-
-**Файл:** `bot/steps/flow.py`
-
-```python
-except Exception:
-    pass
-```
-
-Все исключения проглатываются без логирования. При сбое LLM сложно понять причину.
-
-### 2.4 ADMIN_CHAT_ID: избыточный except
-
-**Файл:** `bot/handlers/messages.py`
-
-```python
-except (ValueError, Exception):
-    pass
-```
-
-`Exception` уже включает `ValueError`. Достаточно `except Exception`.
+- **Точки входа:** main.py, run.py — оба вызывают bot.main.main(). Railway: railpack.json → main.py, Procfile → run.py (расхождение).
+- **Поток:** Handlers → get_state/set_state → flow → LLM/diagram. Клавиатуры в keyboards.py, шаги в flow.py.
+- **Документация:** ARCHITECTURE.md не упоминает diagram.py, rag.py, keyboards, reply; описан шаг «6 — дерево», в коде шаги 2_upload/2_result/2_extra_*.
 
 ---
 
-## 3. Ненужный код и конфигурации
+## 2. Bugs & risks
 
-### 3.1 Неиспользуемый импорт
-
-**Файл:** `bot/main.py`
-- `import asyncio` — не используется.
-
-### 3.2 Неиспользуемая функция
-
-**Файл:** `bot/utils/helpers.py`
-- `format_user_info(user)` — нигде не вызывается.
-
-### 3.3 Устаревшие документы-заглушки
-
-- **docs/API.md** — шаблон с placeholder'ами, не соответствует реальному боту.
-- **docs/FEATURES.md** — все пункты `[ ]`, не отражает текущую функциональность.
-
-### 3.4 README.md
-
-- Строка `cd 111` — вероятно, скопировано из другого проекта. Для preza_bot корректнее `cd preza_bot` или путь к репозиторию.
-- Структура проекта в README не включает `storage/`, `steps/`, `keyboards.py`, `services/`.
+1. **storage:** один словарь _user_states — при параллельных апдейтах одного user_id возможна потеря данных (last write wins). Рекомендация: блокировка по user_id или копирование при записи.
+2. **reply.py:** open(photo_path) без проверки существования файла → FileNotFoundError. Рекомендация: os.path.isfile() или try/except.
+3. **llm.py:** response.choices[0] без проверки пустого choices → IndexError. Рекомендация: if not response.choices: return None.
+4. **handle_callback:** query.data может быть None → краш. Рекомендация: if not query.data: return.
+5. **ADMIN_CHAT_ID:** int(ADMIN_CHAT_ID) при пустой/нечисловой строке → ValueError перехватывается except: pass без лога. Рекомендация: логировать предупреждение.
+6. Callback_data все < 64 байт — ок.
 
 ---
 
-## 4. Конфигурация
+## 3. Dead code
 
-### 4.1 LLM ключ
-
-**Файл:** `bot/services/llm.py`
-
-Проверка: `LLM_API_KEY == "your_llm_api_key_here"`. В `.env.example` теперь `sk-your_openai_api_key_here`. Стоит добавить проверку на оба варианта или на пустое/placeholder-значение.
-
-### 4.2 Makefile: build пересоздаёт venv
-
-При каждом `make build` venv создаётся заново. Для разработки удобнее `make install` при уже существующем venv. Текущее поведение приемлемо для CI, но можно добавить в README пояснение.
-
-### 4.3 .gitignore
-
-Актуален. `.env` в списке — секреты не попадут в репозиторий.
+- **llm_generate_analysis_diagram** (llm.py) — не вызывается; диаграммы в diagram.py (Kroki+Mermaid).
+- **format_user_info** (helpers.py) — не используется.
+- Для 2_result задаётся и Reply, и Inline — приоритет у inline, Reply по сути не показывается.
 
 ---
 
-## 5. Рекомендуемые правки (по приоритету)
+## 4. Config & env
 
-| # | Правка | Файл | Риск |
-|---|--------|------|------|
-| 1 | Удалить `import asyncio` | main.py | Нет |
-| 2 | Упростить `except (ValueError, Exception)` → `except Exception` | messages.py | Нет |
-| 3 | Добавить логирование в `except Exception` в build_analytics_tree_with_llm | flow.py | Нет |
-| 4 | Объединить два сообщения в шаге 0H_1 | messages.py | Низкий |
-| 5 | Добавить проверку placeholder для LLM (sk-your...) | llm.py | Нет |
-| 6 | Обновить ARCHITECTURE.md | docs/ | Нет |
-| 7 | Удалить или пометить format_user_info как deprecated | helpers.py | Нет |
-| 8 | Обновить README (структура, cd) | README.md | Нет |
+- Секреты только в env. Проверяется только BOT_TOKEN. ADMIN_CHAT_ID без валидации.
+- CI: только BOT_TOKEN. .env.example полный; RAG_EMBEDDING_MODEL в примере нет (в коде дефолт).
+- Запуск: railpack.json — main.py, Procfile — run.py; лучше один способ.
 
 ---
 
-## 6. Что работает корректно
+## 5. Inconsistencies
 
-- Загрузка настроек из `.env`
-- Хранение сессий в памяти
-- Маршрутизация по шагам
-- Интеграция с OpenAI (с fallback)
-- Обработка «Нужна помощь» и уведомление админу
-- Makefile (build, run, clean)
-- .gitignore
-- GitHub Actions release workflow
+- **Дублирование:** handle_message и handle_callback повторяют переходы (0H, сброс, 2_result, 2_extra_result, 1, 2_upload, 2_extra_ask). Рекомендация: общая функция send_step_response(update, next_step, new_state, …).
+- Reply vs Inline — осознанное: выбор сценария и действия после анализа — inline; ввод текста — Reply. parse_mode: Markdown по умолчанию, HTML для результатов — согласовано.
+
+---
+
+## 6. Recommendations (кратко)
+
+1. Обновить ARCHITECTURE.md и README под текущую структуру.
+2. Устранить дублирование в handle_message/handle_callback (общая функция по next_step).
+3. reply.py: проверка файла или try/except перед open().
+4. llm.py: проверка response.choices перед [0].
+5. handle_callback: if not query.data: return.
+6. ADMIN_CHAT_ID: логировать при ошибке int().
+7. Удалить/пометить: llm_generate_analysis_diagram, format_user_info.
+8. Единая точка входа (main.py или run.py) в Procfile/railpack.
+9. Минимальные тесты; README — актуальная структура и «cd preza_bot».
+
+---
+
+## 7. Конкретные правки (список)
+
+**Уже внесённые правки (код):**
+- **reply.py** — проверка `os.path.isfile(photo_path)` и `try/except OSError` при открытии файла фото.
+- **llm.py** — проверка `if not response.choices` в `llm_generate` и `llm_describe_image` перед доступом к `[0]`.
+- **llm.py** — комментарий, что `llm_generate_analysis_diagram` не используется (диаграммы в diagram.py).
+- **messages.py** — в `handle_callback` проверка `if not getattr(query, "data", None): return`.
+- **messages.py** — при ошибке отправки админу логирование `logging.getLogger(__name__).warning(...)` вместо `pass`.
+- **helpers.py** — комментарий, что `format_user_info` зарезервирована для будущего использования.
+
+| # | Файл | Изменение |
+|---|------|-----------|
+| 1 | bot/utils/reply.py | Проверка os.path.isfile(photo_path) или try/except FileNotFoundError |
+| 2 | bot/services/llm.py | if not response.choices: return None в llm_generate и llm_describe_image |
+| 3 | bot/handlers/messages.py | if not query.data: return в handle_callback |
+| 4 | bot/handlers/messages.py | except Exception: log warning при ошибке отправки админу |
+| 5 | bot/services/llm.py | Удалить или пометить llm_generate_analysis_diagram |
+| 6 | bot/utils/helpers.py | Удалить или пометить format_user_info |
+| 7 | docs/ARCHITECTURE.md | Обновить дерево и поток под текущий код |
+| 8 | README.md | cd preza_bot, структура, возможности |
+| 9 | Procfile / railpack.json | Один способ запуска |
+| 10 | .env.example | Опционально RAG_EMBEDDING_MODEL |

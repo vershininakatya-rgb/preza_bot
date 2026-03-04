@@ -8,6 +8,7 @@ from bot.config.settings import LLM_API_KEY, RAG_ENABLED
 logger = logging.getLogger(__name__)
 
 
+# Не используется: диаграммы генерируются в services/diagram.py через Kroki+Mermaid.
 async def llm_generate_analysis_diagram(analysis_text: str) -> tuple[Optional[bytes], Optional[str]]:
     """
     Генерирует схему сопоставления проблем и решений через DALL-E 3.
@@ -182,6 +183,8 @@ async def llm_describe_image(image_bytes: bytes) -> Optional[str]:
             ],
             max_tokens=1000,
         )
+        if not getattr(response, "choices", None) or not response.choices:
+            return None
         return response.choices[0].message.content.strip()
     except Exception as e:
         logger.warning("LLM image description failed: %s", e)
@@ -216,6 +219,8 @@ async def llm_generate(
             max_tokens=max_tokens,
             temperature=0.5,
         )
+        if not getattr(response, "choices", None) or not response.choices:
+            return None
         return response.choices[0].message.content.strip()
     except Exception as e:
         logger.warning("LLM request failed: %s", e)
