@@ -1,5 +1,4 @@
 """Обработчики сообщений бота."""
-import asyncio
 import io
 from telegram import Update
 from telegram.ext import ContextTypes
@@ -28,7 +27,6 @@ from bot.services.llm import llm_supplement_analysis
 from bot.utils.file_extract import extract_text_from_bytes
 from bot.utils.format import format_analysis_text
 from bot.services.diagram import generate_decision_tree_diagram
-from bot.services.email import send_help_request_email
 from bot.utils.reply import reply_with_photo
 
 
@@ -50,7 +48,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         await reply_with_photo(update, msg, "0H_1", kb)
         return
 
-    # Шаг 0H_1: пользователь описал проблему — уведомление админу, email и переход в 0H_3
+    # Шаг 0H_1: пользователь написал, что ему нужна помощь — отправка в ваш Telegram и переход в 0H_3
     if step == "0H_1":
         state["step"] = "0H_3"
         set_state(user_id, state)
@@ -63,19 +61,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
                 admin_id = int(ADMIN_CHAT_ID)
                 admin_msg = (
                     f"🆘 Пользователю нужна помощь\n\n"
-                    f"User: {user.full_name} (@{user.username or '—'}), id={user_id}\n\n"
+                    f"Кто: {user.full_name} (@{user.username or '—'}), id={user_id}\n\n"
                     f"Текст: {text}"
                 )
                 await context.bot.send_message(chat_id=admin_id, text=admin_msg)
             except Exception:
                 pass
-        await asyncio.to_thread(
-            send_help_request_email,
-            username=user.username or "",
-            full_name=user.full_name or "",
-            user_id=user_id,
-            help_text=text,
-        )
         return
 
     # «Начать сначала», «В главное меню», «Справка» — сброс в шаг 1

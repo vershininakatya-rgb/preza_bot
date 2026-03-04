@@ -11,15 +11,9 @@ BOT_TOKEN = os.getenv('BOT_TOKEN')
 # LLM API Key (опционально; нужен для анализа). Поддерживаются LLM_API_KEY и OPENAI_API_KEY
 LLM_API_KEY = os.getenv('LLM_API_KEY') or os.getenv('OPENAI_API_KEY')
 
-# Chat ID администратора для уведомлений «Нужна помощь» (опционально)
+# Chat ID, куда приходят запросы «Нужна помощь» (ваш Telegram; опционально)
+# Узнать свой chat_id: написать боту @userinfobot или посмотреть в логах при первом сообщении
 ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID')
-
-# Email для запросов помощи (опционально; нужен SMTP для отправки)
-HELP_EMAIL = os.getenv('HELP_EMAIL', 'vershinina.katya@gmail.com')
-SMTP_HOST = os.getenv('SMTP_HOST')
-SMTP_PORT = int(os.getenv('SMTP_PORT') or 587)
-SMTP_USER = os.getenv('SMTP_USER')
-SMTP_PASSWORD = os.getenv('SMTP_PASSWORD')
 
 # RAG (PostgreSQL + pgvector)
 DATABASE_URL = os.getenv('DATABASE_URL')

@@ -2,7 +2,7 @@
 from telegram import Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
 
-from bot.config.settings import BOT_TOKEN, HELP_EMAIL, LLM_API_KEY, SMTP_HOST, SMTP_PASSWORD, SMTP_USER
+from bot.config.settings import BOT_TOKEN, LLM_API_KEY
 from bot.handlers import commands, messages
 from bot.utils.logger import get_logger
 
@@ -40,12 +40,6 @@ def main() -> None:
         logger.warning("LLM_API_KEY не задан — диаграммы и анализ через LLM недоступны")
     else:
         logger.info("LLM_API_KEY загружен (диаграммы и анализ доступны)")
-    if all([SMTP_HOST, SMTP_USER, SMTP_PASSWORD]):
-        logger.info("Email для запросов помощи: настроен → %s", HELP_EMAIL)
-    else:
-        logger.warning(
-            "Email для «Нужна помощь» не настроен. Добавьте в .env: SMTP_HOST, SMTP_USER, SMTP_PASSWORD"
-        )
     application.run_polling(
         allowed_updates=Update.ALL_TYPES,
         drop_pending_updates=True,

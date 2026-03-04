@@ -47,14 +47,7 @@ cp .env.example .env
 - **BOT_TOKEN** — [@BotFather](https://t.me/BotFather) в Telegram (`/newbot` или `/token`).
 - **LLM_API_KEY** — у провайдера LLM (например, [OpenAI API keys](https://platform.openai.com/api-keys)). Загружается в `.env` и читается в коде через `bot.config.settings.LLM_API_KEY`.
 
-**Email для запросов «Нужна помощь»** — чтобы письма отправлялись на vershinina.katya@gmail.com, добавьте в `.env`:
-```
-SMTP_HOST=smtp.gmail.com
-SMTP_PORT=587
-SMTP_USER=vershinina.katya@gmail.com
-SMTP_PASSWORD=пароль_приложения_google
-```
-Для Gmail нужен [пароль приложения](https://support.google.com/accounts/answer/185833), не обычный пароль.
+**Запросы «Нужна помощь»** — чтобы сообщения приходили вам в личку Telegram, укажите в `.env` свой **ADMIN_CHAT_ID** (числовой id). Узнать: написать боту [@userinfobot](https://t.me/userinfobot) в Telegram.
 
 ## Запуск
 

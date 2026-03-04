@@ -1,7 +1,7 @@
 # Cursor Rules — проект preza_bot
 
 ## 🎯 О проекте
-Telegram-бот на Python для анализа проблем в процессах и командах: сценарий «Анализ проблемы», LLM (OpenAI), диаграммы дерева решений (Kroki + Mermaid), RAG (опционально), email для запросов «Нужна помощь». Деплой: Railway (worker, long polling). Точка входа: `main.py` или `run.py`.
+Telegram-бот на Python для анализа проблем в процессах и командах: сценарий «Анализ проблемы», LLM (OpenAI), диаграммы дерева решений (Kroki + Mermaid), RAG (опционально). Запросы «Нужна помощь» приходят в Telegram (ADMIN_CHAT_ID). Деплой: Railway (worker, long polling). Точка входа: `main.py` или `run.py`.
 
 ## 📁 Структура проекта
 ```
@@ -12,7 +12,7 @@ preza_bot/
 │   ├── handlers/         # commands.py, messages.py
 │   ├── steps/            # flow.py — шаги, тексты, переходы
 │   ├── keyboards.py      # Reply/Inline, callback_data (CB_*)
-│   ├── services/         # llm, diagram, email, rag
+│   ├── services/         # llm, diagram, rag
 │   ├── storage/          # состояние пользователя
 │   └── utils/            # reply, format, file_extract, logger, images
 ├── docs/                 # Документация, DEPLOY_RAILWAY.md
@@ -32,7 +32,7 @@ preza_bot/
 
 ### Стек
 - Python 3.11+. Зависимости только из `requirements.txt`.
-- Обработчики — `async def`. Блокирующий код (SMTP и т.п.) — через `asyncio.to_thread`.
+- Обработчики — `async def`. Блокирующий код — через `asyncio.to_thread` при необходимости.
 
 ### Разделение ответственности
 - Обработчики в `handlers/`, логика шагов в `steps/flow.py`, клавиатуры в `keyboards.py`, внешние API в `services/`.
@@ -41,7 +41,7 @@ preza_bot/
 ### Обработка ошибок
 - Async-операции оборачивать в try/except; не ронять бота.
 - Пользователю — короткие понятные сообщения; в лог — контекст для отладки (logger.warning/error).
-- Внешние сервисы (LLM, Kroki, SMTP): при сбое — fallback или сообщение об ошибке, без падения.
+- Внешние сервисы (LLM, Kroki): при сбое — fallback или сообщение об ошибке, без падения.
 
 ### Изменения архитектуры
 - **Критично:** изменения архитектуры, контрактов данных или ключевых методов — сначала описать, что и зачем меняется, какой эффект на текущий функционал, и получить явное одобрение перед реализацией.
@@ -70,7 +70,7 @@ preza_bot/
 ### Внешние сервисы
 - **LLM:** OpenAI (LLM_API_KEY/OPENAI_API_KEY). При недоступности — понятное сообщение, без краша.
 - **Диаграммы:** Mermaid → Kroki; при сбое LLM допустим пример-диаграмма.
-- **Email:** SMTP для «Нужна помощь»; отправка в `asyncio.to_thread`.
+- **«Нужна помощь»:** текст пользователя отправляется в Telegram на ADMIN_CHAT_ID (ваш chat_id).
 - **RAG:** опционально; при отсутствии DATABASE_URL или RAG_ENABLED=false не падать.
 
 ## 🔄 Git
