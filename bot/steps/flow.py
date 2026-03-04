@@ -62,6 +62,8 @@ def get_step_keyboard(step: str) -> Optional[ReplyKeyboardMarkup]:
         return keyboard_help_only()
     if step == "2_extra_result":
         return keyboard_two("Начать сначала", "В главное меню")
+    if step == "0H_1":
+        return None  # без клавиатуры — только поле ввода и кнопка «Отправить»
     if step == "0H_3":
         return keyboard_two("Вернуться в диалог", "В главное меню")
     return keyboard_help_only()
