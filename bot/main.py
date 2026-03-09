@@ -5,15 +5,34 @@ from telegram.ext import Application, CallbackQueryHandler, CommandHandler, Mess
 from bot.config.settings import BOT_TOKEN, LLM_API_KEY, get_log_chat_id
 from bot.handlers import commands, messages
 from bot.utils.logger import get_logger
+from bot.utils.monitoring import send_activity_to_telegram
 
 # Настройка логирования
 logger = get_logger(__name__)
 
 
+async def _post_init_send_log_test(application: Application) -> None:
+    """При старте отправить в канал логов тестовое сообщение — проверка, что канал доступен."""
+    if not get_log_chat_id():
+        return
+    try:
+        await send_activity_to_telegram(
+            application.bot,
+            "✅ Логи мониторинга подключены. Через 5 мин неактивности пользователя сюда придёт сводка.",
+        )
+    except Exception as e:
+        logger.warning("Не удалось отправить тест в канал логов: %s", e)
+
+
 def main() -> None:
     """Запуск бота."""
     # Создаем приложение
-    application = Application.builder().token(BOT_TOKEN).build()
+    application = (
+        Application.builder()
+        .token(BOT_TOKEN)
+        .post_init(_post_init_send_log_test)
+        .build()
+    )
 
     # Регистрируем обработчики команд
     application.add_handler(CommandHandler("start", commands.start_command))
