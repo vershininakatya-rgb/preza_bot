@@ -18,6 +18,8 @@ ADMIN_CHAT_ID = os.getenv('ADMIN_CHAT_ID')
 # Chat ID для логов мониторинга (опционально). Если не задан — определяется при /start в группе/канале
 LOG_CHAT_ID = os.getenv('LOG_CHAT_ID')
 LOG_CHAT_ID_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), 'data', 'log_chat_id.txt')
+# После миграции группы в супергруппу Telegram отдаёт новый chat_id; сохраняем его здесь и в файле
+_resolved_log_chat_id: str | None = None
 
 # RAG (PostgreSQL + pgvector)
 DATABASE_URL = os.getenv('DATABASE_URL')
@@ -36,7 +38,9 @@ if not BOT_TOKEN:
 
 
 def get_log_chat_id() -> str | None:
-    """Chat ID для отправки логов мониторинга: из env или из файла."""
+    """Chat ID для отправки логов мониторинга: resolved (после миграции) > env > файл."""
+    if _resolved_log_chat_id:
+        return _resolved_log_chat_id
     if LOG_CHAT_ID and str(LOG_CHAT_ID).strip():
         return str(LOG_CHAT_ID).strip()
     if os.path.isfile(LOG_CHAT_ID_FILE):
@@ -58,3 +62,10 @@ def set_log_chat_id(chat_id: int | str) -> None:
         os.makedirs(dirpath, exist_ok=True)
     with open(path, 'w', encoding='utf-8') as f:
         f.write(str(chat_id))
+
+
+def set_resolved_log_chat_id(chat_id: str | int) -> None:
+    """Задать chat_id после миграции группы в супергруппу (используется и сохраняется в файл)."""
+    global _resolved_log_chat_id
+    _resolved_log_chat_id = str(chat_id)
+    set_log_chat_id(chat_id)

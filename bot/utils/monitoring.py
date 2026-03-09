@@ -1,12 +1,13 @@
 """Логирование активности пользователей в Telegram-чат для мониторинга."""
 import asyncio
 import logging
+import re
 from datetime import datetime
 from typing import Any
 
 import os
 
-from bot.config.settings import get_log_chat_id
+from bot.config.settings import get_log_chat_id, set_resolved_log_chat_id
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,12 @@ def _build_message(username: str, full_name: str, user_id: int, lines: list[str]
     return header + "\n\n" + "\n".join(lines)
 
 
+def _parse_migrated_chat_id(error_message: str) -> str | None:
+    """Если Telegram вернул 'Group migrated to supergroup. New chat id: -100...' — извлечь новый id."""
+    match = re.search(r"New chat id:\s*(-?\d+)", str(error_message), re.IGNORECASE)
+    return match.group(1) if match else None
+
+
 async def _send_to_telegram(bot: Any, text: str) -> None:
     chat_id = get_log_chat_id()
     if not chat_id:
@@ -70,11 +77,22 @@ async def _send_to_telegram(bot: Any, text: str) -> None:
         await bot.send_message(chat_id=int(chat_id), text=text)
         logger.info("Лог мониторинга отправлен в чат %s", chat_id)
     except Exception as e:
-        logger.warning(
-            "Не удалось отправить лог в Telegram (чат %s). Проверьте: бот добавлен в канал как админ с правом публикации? Ошибка: %s",
-            chat_id,
-            e,
-        )
+        err_str = str(e)
+        new_id = _parse_migrated_chat_id(err_str)
+        if new_id:
+            set_resolved_log_chat_id(new_id)
+            logger.info("Чат логов мигрировал в супергруппу, использован новый id: %s", new_id)
+            try:
+                await bot.send_message(chat_id=int(new_id), text=text)
+                logger.info("Лог мониторинга отправлен в чат %s", new_id)
+            except Exception as e2:
+                logger.warning("Повторная отправка в новый чат не удалась: %s", e2)
+        else:
+            logger.warning(
+                "Не удалось отправить лог в Telegram (чат %s). Проверьте: бот добавлен в канал как админ с правом публикации? Ошибка: %s",
+                chat_id,
+                e,
+            )
 
 
 async def _delayed_flush(user_id: int, bot: Any) -> None:
