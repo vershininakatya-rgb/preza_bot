@@ -4,11 +4,17 @@ import logging
 from datetime import datetime
 from typing import Any
 
+import os
+
 from bot.config.settings import get_log_chat_id
 
 logger = logging.getLogger(__name__)
 
-SESSION_TIMEOUT_SEC = 300  # 5 минут
+# Таймаут неактивности перед отправкой лога (секунды). По умолчанию 5 мин; для проверки можно задать LOG_SESSION_TIMEOUT_SEC=60
+try:
+    SESSION_TIMEOUT_SEC = int(os.environ.get("LOG_SESSION_TIMEOUT_SEC", "300"))
+except (TypeError, ValueError):
+    SESSION_TIMEOUT_SEC = 300
 
 _buffers: dict[int, dict[str, Any]] = {}  # user_id -> {"lines": [...], "username": str, "full_name": str, "user_id": int}
 _timers: dict[int, asyncio.Task[None]] = {}
@@ -61,9 +67,14 @@ async def _send_to_telegram(bot: Any, text: str) -> None:
     if len(text) > 4096:
         text = text[:4093] + "..."
     try:
-        await bot.send_message(chat_id=chat_id, text=text)
+        await bot.send_message(chat_id=int(chat_id), text=text)
+        logger.info("Лог мониторинга отправлен в чат %s", chat_id)
     except Exception as e:
-        logger.warning("Не удалось отправить лог в Telegram: %s", e)
+        logger.warning(
+            "Не удалось отправить лог в Telegram (чат %s). Проверьте: бот добавлен в канал как админ с правом публикации? Ошибка: %s",
+            chat_id,
+            e,
+        )
 
 
 async def _delayed_flush(user_id: int, bot: Any) -> None:
@@ -98,7 +109,9 @@ def log_activity(
     Добавить строку в буфер пользователя и перезапустить таймер отправки (5 мин).
     Не отправляет сообщение сразу — буфер отправится одним сообщением после 5 мин бездействия.
     """
-    if get_log_chat_id() is None:
+    chat_id = get_log_chat_id()
+    if chat_id is None:
+        logger.debug("LOG_CHAT_ID не задан — лог мониторинга не отправляется")
         return
     user_id = user.id if hasattr(user, "id") else int(user)
     username = (getattr(user, "username", None) or "").strip() or None

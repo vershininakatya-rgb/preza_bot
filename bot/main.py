@@ -2,7 +2,7 @@
 from telegram import Update
 from telegram.ext import Application, CallbackQueryHandler, CommandHandler, MessageHandler, filters
 
-from bot.config.settings import BOT_TOKEN, LLM_API_KEY
+from bot.config.settings import BOT_TOKEN, LLM_API_KEY, get_log_chat_id
 from bot.handlers import commands, messages
 from bot.utils.logger import get_logger
 
@@ -40,6 +40,14 @@ def main() -> None:
         logger.warning("LLM_API_KEY не задан — диаграммы и анализ через LLM недоступны")
     else:
         logger.info("LLM_API_KEY загружен (диаграммы и анализ доступны)")
+    log_chat = get_log_chat_id()
+    if log_chat:
+        logger.info("Логи мониторинга будут отправляться в чат: %s", log_chat)
+    else:
+        logger.warning(
+            "LOG_CHAT_ID не задан — логи мониторинга не отправляются. "
+            "Задайте в .env или Variables (Railway) или отправьте /start боту в нужном канале."
+        )
     application.run_polling(
         allowed_updates=Update.ALL_TYPES,
         drop_pending_updates=True,
