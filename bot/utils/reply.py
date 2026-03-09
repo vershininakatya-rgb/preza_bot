@@ -28,19 +28,19 @@ async def reply_with_photo(update: Update, msg: str, step: str, kb=None, parse_m
             with open(photo_path, "rb") as f:
                 await message.reply_photo(photo=f, caption=msg, reply_markup=kb, parse_mode=parse_mode)
         except OSError:
-            await message.reply_text(msg or "Продолжаем.", reply_markup=kb, parse_mode=parse_mode)
+            await message.reply_text(msg or "Продолжаем. Я рядом. 🦭", reply_markup=kb, parse_mode=parse_mode)
     elif photo_path and msg:
         try:
             with open(photo_path, "rb") as f:
                 await message.reply_photo(photo=f)
             await message.reply_text(msg, reply_markup=kb, parse_mode=parse_mode)
         except OSError:
-            await message.reply_text(msg or "Продолжаем.", reply_markup=kb, parse_mode=parse_mode)
+            await message.reply_text(msg or "Продолжаем. Я рядом. 🦭", reply_markup=kb, parse_mode=parse_mode)
     elif photo_path:
         try:
             with open(photo_path, "rb") as f:
                 await message.reply_photo(photo=f, reply_markup=kb)
         except OSError:
-            await message.reply_text(msg or "Продолжаем.", reply_markup=kb, parse_mode=parse_mode)
+            await message.reply_text(msg or "Продолжаем. Я рядом. 🦭", reply_markup=kb, parse_mode=parse_mode)
     else:
-        await message.reply_text(msg or "Продолжаем.", reply_markup=kb, parse_mode=parse_mode)
+        await message.reply_text(msg or "Продолжаем. Я рядом. 🦭", reply_markup=kb, parse_mode=parse_mode)

@@ -129,7 +129,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         if supplement:
             msg = format_analysis_text(f"**Дополнительная аналитика**\n\n{supplement}")
         else:
-            msg = "Не удалось выполнить дополнительный анализ (проверьте OPENAI_API_KEY)."
+            msg = "Сейчас дополнительный анализ через сервис недоступен. Можно попробовать позже или начать сначала — я рядом. 🦭"
         new_state["extra_result"] = msg
         set_state(user_id, new_state)
         kb = get_step_inline_keyboard("2_extra_result") or get_step_keyboard("2_extra_result")
@@ -146,7 +146,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
     # Обычный переход на следующий шаг (2_upload, 2_extra_ask и т.д. — step_entered_at уже установлен выше)
     msg = get_step_message(next_step, new_state)
     kb = get_step_keyboard(next_step)
-    await reply_with_photo(update, msg or "Продолжаем.", next_step, kb)
+    await reply_with_photo(update, msg or "Продолжаем. Я рядом. 🦭", next_step, kb)
 
 
 # Маппинг callback_data -> текст (для переиспользования логики handle_message)
@@ -190,7 +190,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             )
         else:
             await message.reply_text(
-                err or "Не удалось сгенерировать диаграмму.",
+                err or "Диаграмму пока не получилось сгенерировать. Можно попробовать позже или опереться на текст анализа. 🦭",
                 reply_markup=kb,
             )
         return
@@ -276,7 +276,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         if supplement:
             msg = format_analysis_text(f"**Дополнительная аналитика**\n\n{supplement}")
         else:
-            msg = "Не удалось выполнить дополнительный анализ (проверьте OPENAI_API_KEY)."
+            msg = "Сейчас дополнительный анализ через сервис недоступен. Можно попробовать позже или начать сначала — я рядом. 🦭"
         new_state["extra_result"] = msg
         set_state(user_id, new_state)
         kb = get_step_inline_keyboard("2_extra_result") or get_step_keyboard("2_extra_result")
@@ -313,7 +313,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if step != "2_upload":
         await reply_with_photo(
             update,
-            "Загрузите файлы на шаге «Анализ проблемы».",
+            "Загрузи файлы на шаге «Анализ проблемы».",
             "2_upload",
         )
         return
@@ -331,7 +331,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning("Failed to download document: %s", e)
-        await reply_with_photo(update, "Не удалось загрузить файл. Попробуйте другой формат (TXT, PDF).", "2_upload")
+        await reply_with_photo(update, "Пока не получилось загрузить файл. Попробуй другой формат (TXT, PDF) — справимся. 🦭", "2_upload")
         return
 
     text = extract_text_from_bytes(data, doc.file_name)
@@ -353,8 +353,7 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     else:
         await reply_with_photo(
             update,
-            "Не удалось извлечь текст из файла. Поддерживаются: TXT, MD, PDF, DOC, DOCX, XLS, XLSX. "
-            "Или вставьте текст в сообщение.",
+            "Текст из этого файла пока не извлёкся. Поддерживаются: TXT, MD, PDF, DOC, DOCX, XLS, XLSX — или вставь текст в сообщение. 🦭",
             "2_upload",
         )
 
@@ -370,7 +369,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     if step != "2_upload":
         await reply_with_photo(
             update,
-            "Загрузите фото на шаге «Анализ проблемы».",
+            "Фото лучше отправить на шаге «Анализ проблемы» — тогда я смогу его разобрать. 🦭",
             "2_upload",
         )
         return
@@ -388,7 +387,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning("Failed to download photo: %s", e)
-        await reply_with_photo(update, "Не удалось загрузить фото.", "2_upload")
+        await reply_with_photo(update, "Фото пока не загрузилось. Попробуй ещё раз или отправь текст/документ. 🦭", "2_upload")
         return
 
     try:
@@ -413,11 +412,10 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         else:
             await reply_with_photo(
                 update,
-                "Не удалось распознать изображение (проверьте OPENAI_API_KEY). "
-                "Попробуйте отправить текст или документ.",
+                "Сейчас распознать изображение не получилось. Можно отправить текст или документ — разберёмся. 🦭",
                 "2_upload",
             )
     except Exception as e:
         import logging
         logging.getLogger(__name__).warning("Photo analysis failed: %s", e)
-        await reply_with_photo(update, "Ошибка при обработке фото. Попробуйте текст или документ.", "2_upload")
+        await reply_with_photo(update, "При обработке фото что-то пошло не так. Попробуй отправить текст или документ — я помогу. 🦭", "2_upload")

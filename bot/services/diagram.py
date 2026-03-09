@@ -110,5 +110,5 @@ async def generate_decision_tree_diagram(analysis_text: str) -> tuple[Optional[b
     # Fallback: пример дерева решений
     img_bytes, err = await kroki_render_mermaid(EXAMPLE_MERMAID.strip())
     if err:
-        return None, err or "Не удалось сгенерировать диаграмму."
+        return None, err or "Диаграмму пока не получилось сгенерировать. Можно попробовать позже или опереться на текст анализа. 🦭"
     return img_bytes, None
