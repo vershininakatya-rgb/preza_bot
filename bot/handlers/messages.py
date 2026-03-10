@@ -400,7 +400,7 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             state["data"].setdefault("file_descriptions", []).append(
                 f"[Описание схемы/диаграммы]\n{description}"
             )
-            log_activity(context.bot, user, "фото", step, "2_result", duration, None)
+            log_activity(context.bot, user, "фото", step, "2_result", duration, "Фото")
             state["step"] = "2_result"
             state["step_entered_at"] = time.time()
             set_state(user_id, state)

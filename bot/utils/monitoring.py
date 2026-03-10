@@ -17,30 +17,9 @@ try:
 except (TypeError, ValueError):
     SESSION_TIMEOUT_SEC = 300
 
-_buffers: dict[int, dict[str, Any]] = {}  # user_id -> {"lines": [...], "username": str, "full_name": str, "user_id": int}
+# Запись: {"time": "HH:MM:SS", "action_type": str, "step_before", "step_after", "duration_sec", "details": str|None}
+_buffers: dict[int, dict[str, Any]] = {}  # user_id -> {"entries": [...], "username", "full_name", "user_id"}
 _timers: dict[int, asyncio.Task[None]] = {}
-
-
-def _format_line(
-    action_type: str,
-    step_before: str,
-    step_after: str,
-    duration_sec: float | None,
-    details: str | None,
-) -> str:
-    now = datetime.now().strftime("%H:%M:%S")
-    if step_before == step_after:
-        step_str = f"шаг {step_before}"
-    else:
-        step_str = f"шаг {step_before} → {step_after}"
-    if duration_sec is None:
-        duration_str = "на шаге — с"
-    else:
-        duration_str = f"на шаге {int(round(duration_sec))} с"
-    parts = [now, action_type, step_str, duration_str]
-    if details:
-        parts.insert(3, details)
-    return " | ".join(parts)
 
 
 def _format_user_label(username: str | None, full_name: str | None, user_id: int) -> str:
@@ -55,10 +34,43 @@ def _format_user_label(username: str | None, full_name: str | None, user_id: int
     return " | ".join(parts)
 
 
-def _build_message(username: str, full_name: str, user_id: int, lines: list[str]) -> str:
+def _build_message(username: str, full_name: str, user_id: int, entries: list[dict[str, Any]]) -> str:
+    """Формирует сообщение в формате ACTION TIMELINE + USER REQUESTS."""
     label = _format_user_label(username or None, full_name or None, user_id)
     header = f"——— {label} ———"
-    return header + "\n\n" + "\n".join(lines)
+
+    timeline_lines = ["📋 ACTION TIMELINE:"]
+    for e in entries:
+        timeline_lines.append(f"   {e['time']} → {e['action_type']}")
+
+    request_lines = ["\n💬 USER REQUESTS:"]
+    for e in entries:
+        details = e.get("details")
+        if details is not None and str(details).strip():
+            raw = str(details).replace('"', "«").strip()
+            if len(raw) > 200:
+                raw = raw[:197] + "..."
+            request_lines.append(f'   {e["time"]}: "{raw}"')
+            request_lines.append(f"   └─ Action: {e['action_type']}")
+
+    if len(request_lines) == 1:
+        request_lines = []  # только заголовок — запросов не было
+
+    # Блок загруженных файлов: все действия «файл» и «фото» с именами/подписью
+    file_lines = ["\n📎 ЗАГРУЖЕННЫЕ ФАЙЛЫ:"]
+    for e in entries:
+        if e.get("action_type") not in ("файл", "фото"):
+            continue
+        details = e.get("details")
+        if details is not None and str(details).strip():
+            label = str(details).strip()
+        else:
+            label = "Фото" if e.get("action_type") == "фото" else "Файл"
+        file_lines.append(f"   {e['time']} — {label}")
+
+    if len(file_lines) == 1:
+        file_lines = []
+    return header + "\n\n" + "\n".join(timeline_lines) + ("\n" + "\n".join(request_lines) if request_lines else "") + ("\n" + "\n".join(file_lines) if file_lines else "")
 
 
 def _parse_migrated_chat_id(error_message: str) -> str | None:
@@ -99,17 +111,17 @@ async def _delayed_flush(user_id: int, bot: Any) -> None:
     await asyncio.sleep(SESSION_TIMEOUT_SEC)
     data = _buffers.pop(user_id, None)
     _timers.pop(user_id, None)
-    if not data or not data.get("lines"):
+    if not data or not data.get("entries"):
         return
     username = data.get("username") or "без ника"
     full_name = data.get("full_name") or ""
-    lines = data["lines"]
+    entries = data["entries"]
     user_id_val = data.get("user_id", user_id)
     text = _build_message(
         username if username != "без ника" else None,
         full_name,
         user_id_val,
-        lines,
+        entries,
     )
     await _send_to_telegram(bot, text)
 
@@ -136,11 +148,19 @@ def log_activity(
     full_name = (getattr(user, "first_name", "") or "").strip()
     if getattr(user, "last_name", None):
         full_name = (full_name + " " + (user.last_name or "").strip()).strip()
-    line = _format_line(action_type, step_before, step_after, duration_sec, details)
+    now = datetime.now().strftime("%H:%M:%S")
+    entry = {
+        "time": now,
+        "action_type": action_type,
+        "step_before": step_before,
+        "step_after": step_after,
+        "duration_sec": duration_sec,
+        "details": details,
+    }
 
     if user_id not in _buffers:
-        _buffers[user_id] = {"lines": [], "username": username or "без ника", "full_name": full_name, "user_id": user_id}
-    _buffers[user_id]["lines"].append(line)
+        _buffers[user_id] = {"entries": [], "username": username or "без ника", "full_name": full_name, "user_id": user_id}
+    _buffers[user_id]["entries"].append(entry)
     _buffers[user_id]["username"] = username or "без ника"
     _buffers[user_id]["full_name"] = full_name
     _buffers[user_id]["user_id"] = user_id
