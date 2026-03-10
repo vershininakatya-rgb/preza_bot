@@ -1,6 +1,6 @@
 """Вспомогательные функции для отправки сообщений с изображениями."""
 import os
-from telegram import Update
+from telegram import Update, ReplyKeyboardRemove
 
 from bot.utils.images import get_step_image_path
 
@@ -19,6 +19,9 @@ async def reply_with_photo(update: Update, msg: str, step: str, kb=None, parse_m
     message = _get_message(update)
     if not message:
         return
+    # Если клавиатура не задана — убираем Reply-клавиатуру (дублирующая «Нужна помощь» исчезает)
+    if kb is None:
+        kb = ReplyKeyboardRemove()
     # На шагах с результатами анализа картинку не показываем
     photo_path = None if step in ("2_result", "2_extra_result") else get_step_image_path(step)
     if photo_path and not os.path.isfile(photo_path):

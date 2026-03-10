@@ -2,7 +2,6 @@
 from typing import Optional
 from telegram import InlineKeyboardMarkup, ReplyKeyboardMarkup
 from bot.keyboards import (
-    keyboard_help_only,
     keyboard_step1,
     keyboard_two,
     keyboard_choice,
@@ -49,21 +48,21 @@ def get_step_keyboard(step: str) -> Optional[ReplyKeyboardMarkup]:
     if step == "1":
         return keyboard_step1()
     if step == "2_upload":
-        return keyboard_help_only()
+        return None  # без Reply-клавиатуры — убираем дубль «Нужна помощь»; кнопки только под постом (inline)
     if step == "2_result":
         return keyboard_choice([
             ["Нужна дополнительная аналитика"],
             ["Начать сначала"],
         ])
     if step == "2_extra_ask":
-        return keyboard_help_only()
+        return None
     if step == "2_extra_result":
         return keyboard_two("Начать сначала", "В главное меню")
     if step == "0H_1":
         return None  # без клавиатуры — только поле ввода и кнопка «Отправить»
     if step == "0H_3":
         return keyboard_two("Вернуться в диалог", "В главное меню")
-    return keyboard_help_only()
+    return None  # по умолчанию без Reply-клавиатуры
 
 
 def get_step_inline_keyboard(step: str) -> Optional[InlineKeyboardMarkup]:
