@@ -84,20 +84,23 @@
 
 ### БД: Supabase или PostgreSQL (RAG и сохранение данных бота)
 
-Бот может сохранять в БД пользователей, аналитику проблем, диаграммы решений и обратную связь «Нужна помощь». Используется одна переменная **DATABASE_URL**.
+Бот может сохранять в БД пользователей, аналитику проблем, диаграммы решений и обратную связь «Нужна помощь». Подключение к Supabase: **REST API** (рекомендуется) или **DATABASE_URL** (прямое подключение к Postgres).
+
+**Пошаговая связка Supabase + Railway:** см. [SUPABASE_AND_RAILWAY.md](SUPABASE_AND_RAILWAY.md) — от создания проекта в Supabase до проверки бота на Railway.
 
 **Вариант 1 — Supabase (рекомендуется):**
 
 1. Создайте проект на [supabase.com](https://supabase.com), включите расширение **vector** (Project Settings → Database → Extensions).
-2. Скопируйте connection string (URI) из Project Settings → Database.
-3. В Railway → **Variables** добавьте **DATABASE_URL** со значением этого URI.
-4. Один раз выполните инициализацию схемы (локально с `DATABASE_URL` из .env или через скрипт): `python -m scripts.init_supabase_schema`. Подробно: [docs/SUPABASE_SETUP.md](SUPABASE_SETUP.md).
-5. При необходимости: **RAG_ENABLED** = `true`, **PERSIST_TO_DB** = `true` (по умолчанию запись в БД включена при наличии DATABASE_URL).
+2. Один раз примените схему: `python -m scripts.init_supabase_schema` (локально с **DATABASE_URL** в .env) или выполните [scripts/schema.sql](../scripts/schema.sql) в Supabase SQL Editor. Подробно: [SUPABASE_SETUP.md](SUPABASE_SETUP.md).
+3. В Railway → **Variables** добавьте:
+   - **SUPABASE_URL** (Settings → API → Project URL) и **SUPABASE_SERVICE_ROLE_KEY** (Settings → API → service_role) — для сохранения данных через REST API; **или**
+   - **DATABASE_URL** (connection string из Project Settings → Database) — для прямого подключения к Postgres.
+4. При необходимости: **RAG_ENABLED** = `true` (для RAG нужен **DATABASE_URL**), **PERSIST_TO_DB** = `true` (по умолчанию включено при наличии REST-переменных или DATABASE_URL).
 
 **Вариант 2 — PostgreSQL на Railway:**
 
 - Добавьте плагин **PostgreSQL** в проект Railway — Railway подставит **DATABASE_URL** автоматически.
-- Выполните один раз `python -m scripts.init_supabase_schema` (с DATABASE_URL из переменных) для создания таблиц.
+- Выполните один раз `python -m scripts.init_supabase_schema` (с DATABASE_URL) для создания таблиц.
 - Вручную добавьте **RAG_ENABLED** = `true` при использовании RAG.
 
 **Отключение сохранения в БД:** задайте **PERSIST_TO_DB** = `false`, если нужен только RAG без записи пользователей/аналитики/диаграмм/обратной связи.
