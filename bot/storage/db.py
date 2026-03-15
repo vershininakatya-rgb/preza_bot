@@ -1,19 +1,148 @@
 """
-Сохранение данных бота в PostgreSQL (Supabase): пользователи, аналитика, диаграммы, обратная связь.
-Используется только при заданных DATABASE_URL и PERSIST_TO_DB=true.
+Сохранение данных бота: Supabase REST API или PostgreSQL (asyncpg).
+При заданных SUPABASE_URL и SUPABASE_SERVICE_ROLE_KEY используется REST API;
+иначе — DATABASE_URL и asyncpg. Включение записи: PERSIST_TO_DB=true.
 """
+import asyncio
 import json
 import logging
-from typing import Optional
+from datetime import datetime, timezone
+from typing import Any, Optional
 
-from bot.config.settings import DATABASE_URL, PERSIST_TO_DB
+from bot.config.settings import (
+    DATABASE_URL,
+    PERSIST_TO_DB,
+    SUPABASE_SERVICE_ROLE_KEY,
+    SUPABASE_URL,
+)
 
 logger = logging.getLogger(__name__)
 
+_supabase_client: Any = None
+
+
+def _use_supabase_rest() -> bool:
+    """Использовать Supabase REST API для записи (нужны URL и service_role key)."""
+    return bool(
+        SUPABASE_URL and SUPABASE_URL.strip()
+        and SUPABASE_SERVICE_ROLE_KEY and SUPABASE_SERVICE_ROLE_KEY.strip()
+    )
+
 
 def _should_persist() -> bool:
-    """Писать в БД только при наличии URL и включённом флаге."""
-    return bool(DATABASE_URL and DATABASE_URL.strip() and PERSIST_TO_DB)
+    """Писать в БД: включён флаг и есть либо Supabase REST, либо DATABASE_URL."""
+    if not PERSIST_TO_DB:
+        return False
+    if _use_supabase_rest():
+        return True
+    return bool(DATABASE_URL and DATABASE_URL.strip())
+
+
+def _get_supabase_client():
+    """Ленивое создание клиента Supabase (синхронный)."""
+    global _supabase_client
+    if _supabase_client is None:
+        from supabase import create_client
+        _supabase_client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
+    return _supabase_client
+
+
+# --- Supabase REST (синхронные вызовы, запускаем в to_thread) ---
+
+
+def _supabase_upsert_user(
+    telegram_user_id: int,
+    username: Optional[str],
+    full_name: Optional[str],
+) -> Optional[int]:
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    row = {
+        "telegram_user_id": telegram_user_id,
+        "username": username,
+        "full_name": full_name,
+        "last_seen": now,
+    }
+    resp = _get_supabase_client().table("telegram_users").upsert(
+        row, on_conflict="telegram_user_id"
+    ).execute()
+    if resp.data and len(resp.data) > 0:
+        return resp.data[0].get("id")
+    return None
+
+
+def _supabase_insert_analysis(
+    user_id: int,
+    input_texts: list,
+    file_descriptions: list,
+    analysis_result: Optional[str],
+    extra_request: Optional[str],
+    extra_result: Optional[str],
+) -> Optional[int]:
+    row = {
+        "user_id": user_id,
+        "input_texts": input_texts,
+        "file_descriptions": file_descriptions,
+        "analysis_result": analysis_result,
+        "extra_request": extra_request,
+        "extra_result": extra_result,
+    }
+    resp = _get_supabase_client().table("analyses").insert(row).execute()
+    if resp.data and len(resp.data) > 0:
+        return resp.data[0].get("id")
+    return None
+
+
+def _supabase_update_analysis_extra(
+    analysis_id: int, extra_request: str, extra_result: str
+) -> None:
+    now = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    _get_supabase_client().table("analyses").update({
+        "extra_request": extra_request,
+        "extra_result": extra_result,
+        "updated_at": now,
+    }).eq("id", analysis_id).execute()
+
+
+def _supabase_insert_diagram(
+    analysis_id: int,
+    user_id: int,
+    mermaid_code: Optional[str],
+    success: bool,
+    error_message: Optional[str],
+) -> None:
+    _get_supabase_client().table("diagrams").insert({
+        "analysis_id": analysis_id,
+        "user_id": user_id,
+        "mermaid_code": mermaid_code,
+        "success": success,
+        "error_message": error_message,
+    }).execute()
+
+
+def _supabase_insert_feedback(
+    user_id: int, step: Optional[str], message_text: str
+) -> None:
+    _get_supabase_client().table("feedback_requests").insert({
+        "user_id": user_id,
+        "step": step,
+        "message_text": message_text or "",
+    }).execute()
+
+
+def _supabase_get_internal_user_id(telegram_user_id: int) -> Optional[int]:
+    resp = (
+        _get_supabase_client()
+        .table("telegram_users")
+        .select("id")
+        .eq("telegram_user_id", telegram_user_id)
+        .execute()
+    )
+    if resp.data and len(resp.data) > 0:
+        return resp.data[0].get("id")
+    return None
+
+
+# --- Публичные async-функции ---
 
 
 async def upsert_user(
@@ -23,10 +152,21 @@ async def upsert_user(
 ) -> Optional[int]:
     """
     Создать или обновить пользователя; обновить last_seen.
-    Возвращает внутренний id (telegram_users.id) или None при ошибке/отключённой персистентности.
+    Возвращает внутренний id (telegram_users.id) или None.
     """
     if not _should_persist():
         return None
+    if _use_supabase_rest():
+        try:
+            return await asyncio.to_thread(
+                _supabase_upsert_user,
+                telegram_user_id,
+                username or None,
+                full_name or None,
+            )
+        except Exception as e:
+            logger.warning("db upsert_user (Supabase REST) failed: %s", e)
+            return None
     try:
         import asyncpg
         conn = await asyncpg.connect(DATABASE_URL)
@@ -61,12 +201,23 @@ async def insert_analysis(
     extra_request: Optional[str] = None,
     extra_result: Optional[str] = None,
 ) -> Optional[int]:
-    """
-    Вставить запись анализа. user_id — внутренний id из telegram_users.
-    Возвращает id созданной записи (analyses.id) или None.
-    """
+    """Вставить запись анализа. user_id — внутренний id из telegram_users. Возвращает analyses.id или None."""
     if not _should_persist():
         return None
+    if _use_supabase_rest():
+        try:
+            return await asyncio.to_thread(
+                _supabase_insert_analysis,
+                user_id,
+                input_texts,
+                file_descriptions,
+                analysis_result,
+                extra_request,
+                extra_result,
+            )
+        except Exception as e:
+            logger.warning("db insert_analysis (Supabase REST) failed: %s", e)
+            return None
     try:
         import asyncpg
         conn = await asyncpg.connect(DATABASE_URL)
@@ -100,6 +251,17 @@ async def update_analysis_extra(
     """Обновить запись анализа: доп. запрос и результат."""
     if not _should_persist():
         return
+    if _use_supabase_rest():
+        try:
+            await asyncio.to_thread(
+                _supabase_update_analysis_extra,
+                analysis_id,
+                extra_request,
+                extra_result,
+            )
+        except Exception as e:
+            logger.warning("db update_analysis_extra (Supabase REST) failed: %s", e)
+        return
     try:
         import asyncpg
         conn = await asyncpg.connect(DATABASE_URL)
@@ -128,6 +290,19 @@ async def insert_diagram(
 ) -> None:
     """Сохранить факт генерации диаграммы. user_id — внутренний id (telegram_users.id)."""
     if not _should_persist():
+        return
+    if _use_supabase_rest():
+        try:
+            await asyncio.to_thread(
+                _supabase_insert_diagram,
+                analysis_id,
+                user_id,
+                mermaid_code,
+                success,
+                error_message,
+            )
+        except Exception as e:
+            logger.warning("db insert_diagram (Supabase REST) failed: %s", e)
         return
     try:
         import asyncpg
@@ -158,6 +333,17 @@ async def insert_feedback(
     """Сохранить обратную связь «Нужна помощь». user_id — внутренний id (telegram_users.id)."""
     if not _should_persist():
         return
+    if _use_supabase_rest():
+        try:
+            await asyncio.to_thread(
+                _supabase_insert_feedback,
+                user_id,
+                step,
+                message_text or "",
+            )
+        except Exception as e:
+            logger.warning("db insert_feedback (Supabase REST) failed: %s", e)
+        return
     try:
         import asyncpg
         conn = await asyncpg.connect(DATABASE_URL)
@@ -178,12 +364,18 @@ async def insert_feedback(
 
 
 async def get_internal_user_id(telegram_user_id: int) -> Optional[int]:
-    """
-    Получить внутренний id пользователя по telegram_user_id.
-    Если пользователя нет — вернёт None (нужно сначала вызвать upsert_user).
-    """
+    """Получить внутренний id по telegram_user_id. Если нет — None (сначала upsert_user)."""
     if not _should_persist():
         return None
+    if _use_supabase_rest():
+        try:
+            return await asyncio.to_thread(
+                _supabase_get_internal_user_id,
+                telegram_user_id,
+            )
+        except Exception as e:
+            logger.warning("db get_internal_user_id (Supabase REST) failed: %s", e)
+            return None
     try:
         import asyncpg
         conn = await asyncpg.connect(DATABASE_URL)

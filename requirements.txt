@@ -10,3 +10,5 @@ xlrd>=2.0
 psycopg[binary]>=3.1
 asyncpg>=0.29
 pgvector>=0.2
+# Supabase REST API (опционально, для сохранения данных бота)
+supabase>=2.0
