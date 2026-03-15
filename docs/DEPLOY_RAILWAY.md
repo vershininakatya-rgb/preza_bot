@@ -82,17 +82,25 @@
 | `LOG_LEVEL`          | `INFO` (по умолчанию) |
 | `PYTHONUNBUFFERED`   | `1` — отключить буфер stdout; логи в Railway появятся сразу (в коде уже включён сброс буфера для логгера, эта переменная нужна для любого другого `print`) |
 
-### RAG (база знаний) — по желанию
+### БД: Supabase или PostgreSQL (RAG и сохранение данных бота)
 
-Если не используете PostgreSQL с pgvector, эти переменные можно не добавлять:
+Бот может сохранять в БД пользователей, аналитику проблем, диаграммы решений и обратную связь «Нужна помощь». Используется одна переменная **DATABASE_URL**.
 
-- `RAG_ENABLED` = `false`
+**Вариант 1 — Supabase (рекомендуется):**
 
-Если подключаете базу на Railway:
+1. Создайте проект на [supabase.com](https://supabase.com), включите расширение **vector** (Project Settings → Database → Extensions).
+2. Скопируйте connection string (URI) из Project Settings → Database.
+3. В Railway → **Variables** добавьте **DATABASE_URL** со значением этого URI.
+4. Один раз выполните инициализацию схемы (локально с `DATABASE_URL` из .env или через скрипт): `python -m scripts.init_supabase_schema`. Подробно: [docs/SUPABASE_SETUP.md](SUPABASE_SETUP.md).
+5. При необходимости: **RAG_ENABLED** = `true`, **PERSIST_TO_DB** = `true` (по умолчанию запись в БД включена при наличии DATABASE_URL).
 
-- Добавьте плагин **PostgreSQL** в проект Railway.
-- Railway подставит `DATABASE_URL` автоматически.
-- Вручную добавьте: `RAG_ENABLED` = `true`.
+**Вариант 2 — PostgreSQL на Railway:**
+
+- Добавьте плагин **PostgreSQL** в проект Railway — Railway подставит **DATABASE_URL** автоматически.
+- Выполните один раз `python -m scripts.init_supabase_schema` (с DATABASE_URL из переменных) для создания таблиц.
+- Вручную добавьте **RAG_ENABLED** = `true` при использовании RAG.
+
+**Отключение сохранения в БД:** задайте **PERSIST_TO_DB** = `false`, если нужен только RAG без записи пользователей/аналитики/диаграмм/обратной связи.
 
 После добавления переменных Railway перезапустит сервис сам.
 

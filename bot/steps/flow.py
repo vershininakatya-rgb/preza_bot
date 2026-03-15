@@ -93,6 +93,7 @@ def process_step_answer(step: str, text: str, state: dict) -> tuple[str, dict]:
         state["extra_result"] = None
         state["extra_request"] = None
         state["return_after_help"] = None
+        state["analysis_db_id"] = None
         return "1", state
 
     if step == "0H_3" and text == "Вернуться в диалог":
@@ -103,6 +104,7 @@ def process_step_answer(step: str, text: str, state: dict) -> tuple[str, dict]:
     if step == "0H_3" and text == "В главное меню":
         state["return_after_help"] = None
         state["step"] = "1"
+        state["analysis_db_id"] = None
         return "1", state
 
     if step == "1":

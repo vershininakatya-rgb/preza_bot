@@ -24,6 +24,8 @@ _resolved_log_chat_id: str | None = None
 # RAG (PostgreSQL + pgvector)
 DATABASE_URL = os.getenv('DATABASE_URL')
 RAG_ENABLED = os.getenv('RAG_ENABLED', 'false').lower() == 'true'
+# Сохранение данных бота в БД (пользователи, аналитика, диаграммы, обратная связь)
+PERSIST_TO_DB = os.getenv('PERSIST_TO_DB', 'true').lower() == 'true'
 RAG_TOP_K = int(os.getenv('RAG_TOP_K', '5'))
 RAG_EMBEDDING_MODEL = os.getenv('RAG_EMBEDDING_MODEL', 'text-embedding-3-small')
 RAG_EMBEDDING_DIM = 1536  # для text-embedding-3-small

@@ -93,23 +93,29 @@ def _strip_html(text: str) -> str:
     return re.sub(r"<[^>]+>", "", text).strip()
 
 
-async def generate_decision_tree_diagram(analysis_text: str) -> tuple[Optional[bytes], Optional[str]]:
+async def generate_decision_tree_diagram(
+    analysis_text: str,
+) -> tuple[Optional[bytes], Optional[str], Optional[str]]:
     """
     Генерирует PNG-диаграмму дерева решений из текста анализа.
     LLM → Mermaid → Kroki. При сбое LLM — пример диаграммы.
+    Возвращает (img_bytes, error_message, mermaid_code). mermaid_code — для сохранения в БД.
     """
     plain = _strip_html(analysis_text or "")
+    mermaid_used: Optional[str] = None
 
     if LLM_API_KEY and LLM_API_KEY.strip() not in ("your_llm_api_key_here", "sk-your_openai_api_key_here"):
         if plain:
             mermaid = await llm_analysis_to_mermaid(plain)
             if mermaid:
+                mermaid_used = mermaid
                 img_bytes, err = await kroki_render_mermaid(mermaid)
                 if not err:
-                    return img_bytes, None
+                    return img_bytes, None, mermaid
 
     # Fallback: пример дерева решений
-    img_bytes, err = await kroki_render_mermaid(EXAMPLE_MERMAID.strip())
+    fallback_mermaid = EXAMPLE_MERMAID.strip()
+    img_bytes, err = await kroki_render_mermaid(fallback_mermaid)
     if err:
-        return None, err or "Диаграмму пока не получилось сгенерировать. Можно попробовать позже или опереться на текст анализа. 🦭"
-    return img_bytes, None
+        return None, err or "Диаграмму пока не получилось сгенерировать. Можно попробовать позже или опереться на текст анализа. 🦭", None
+    return img_bytes, None, fallback_mermaid

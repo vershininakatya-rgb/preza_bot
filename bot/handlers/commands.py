@@ -5,6 +5,7 @@ from telegram.ext import ContextTypes
 
 from bot.config.settings import get_log_chat_id, set_log_chat_id
 from bot.storage import get_state, set_state, clear_state
+from bot.storage.db import upsert_user
 from bot.steps.flow import get_step_message, get_step_keyboard, get_step_inline_keyboard
 from bot.utils.monitoring import log_activity, send_activity_to_telegram
 from bot.utils.reply import reply_with_photo
@@ -53,6 +54,11 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
     state = get_state(user_id)
     state["step_entered_at"] = time.time()
     set_state(user_id, state)
+    # Сохранение пользователя в БД (при включённой персистентности)
+    first = (getattr(user, "first_name", None) or "").strip()
+    last = (getattr(user, "last_name", None) or "").strip()
+    full_name = (first + " " + last).strip() if last else first
+    await upsert_user(user_id, getattr(user, "username", None), full_name or None)
     msg = get_step_message("1")
     kb = get_step_inline_keyboard("1") or get_step_keyboard("1")
     await reply_with_photo(update, msg, "1", kb)

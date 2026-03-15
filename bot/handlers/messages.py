@@ -28,6 +28,13 @@ from bot.services.llm import llm_supplement_analysis
 from bot.utils.file_extract import extract_text_from_bytes
 from bot.utils.format import format_analysis_text
 from bot.services.diagram import generate_decision_tree_diagram
+from bot.storage.db import (
+    upsert_user,
+    insert_analysis,
+    update_analysis_extra,
+    insert_diagram,
+    insert_feedback,
+)
 from bot.utils.monitoring import log_activity
 from bot.utils.reply import reply_with_photo
 
@@ -37,6 +44,15 @@ def _duration_sec(state: dict) -> float | None:
     if t is None:
         return None
     return time.time() - t
+
+
+def _user_full_name(user) -> str:
+    """Собрать полное имя из first_name и last_name (Telegram User)."""
+    first = (getattr(user, "first_name", None) or "").strip()
+    last = (getattr(user, "last_name", None) or "").strip()
+    if last:
+        return (first + " " + last).strip()
+    return first
 
 
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -84,6 +100,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             except Exception as e:
                 import logging
                 logging.getLogger(__name__).warning("ADMIN_CHAT_ID invalid or send failed: %s", e)
+        # Сохранение обратной связи в БД
+        internal_id = await upsert_user(user_id, getattr(user, "username", None), _user_full_name(user))
+        if internal_id is not None:
+            await insert_feedback(internal_id, state.get("return_after_help"), text or "")
         return
 
     # «Начать сначала», «В главное меню», «Справка» — сброс в шаг 1
@@ -95,6 +115,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         state["analysis_result"] = None
         state["extra_result"] = None
         state["extra_request"] = None
+        state["analysis_db_id"] = None
         state["step_entered_at"] = time.time()
         set_state(user_id, state)
         msg = get_step_message("1")
@@ -113,6 +134,19 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
         analysis_text = await analyze_problem_with_llm(new_state)
         new_state["analysis_result"] = analysis_text
         set_state(user_id, new_state)
+        # Сохранение анализа в БД
+        internal_id = await upsert_user(user_id, getattr(user, "username", None), _user_full_name(user))
+        if internal_id is not None:
+            data_obj = new_state.get("data", {})
+            texts = data_obj.get("texts", [])
+            files = data_obj.get("file_descriptions", [])
+            analysis_db_id = await insert_analysis(
+                internal_id, texts, files,
+                analysis_result=analysis_text,
+            )
+            if analysis_db_id is not None:
+                new_state["analysis_db_id"] = analysis_db_id
+                set_state(user_id, new_state)
         kb = get_step_inline_keyboard("2_result") or get_step_keyboard("2_result")
         await reply_with_photo(update, analysis_text, "2_result", kb, parse_mode="HTML")
         return
@@ -132,6 +166,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> 
             msg = "Сейчас дополнительный анализ через сервис недоступен. Можно попробовать позже или начать сначала — я рядом. 🦭"
         new_state["extra_result"] = msg
         set_state(user_id, new_state)
+        analysis_db_id = new_state.get("analysis_db_id")
+        if analysis_db_id is not None:
+            await update_analysis_extra(analysis_db_id, request or "", msg)
         kb = get_step_inline_keyboard("2_extra_result") or get_step_keyboard("2_extra_result")
         await reply_with_photo(update, msg, "2_extra_result", kb, parse_mode="HTML")
         return
@@ -179,9 +216,19 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     if data == CB_STEP2_RESULT_DIAGRAM and step == "2_result":
         log_activity(context.bot, user, "кнопка", step, "2_result", duration, "Сделать диаграмму решений")
         analysis = state.get("analysis_result", "")
-        img_bytes, err = await generate_decision_tree_diagram(analysis)
+        img_bytes, err, mermaid_code = await generate_decision_tree_diagram(analysis)
         message = query.message
         kb = get_step_inline_keyboard("2_result") or get_step_keyboard("2_result")
+        # Сохранение диаграммы в БД
+        analysis_db_id = state.get("analysis_db_id")
+        internal_id = await upsert_user(user_id, getattr(user, "username", None), _user_full_name(user))
+        if analysis_db_id is not None and internal_id is not None:
+            await insert_diagram(
+                analysis_db_id, internal_id,
+                mermaid_code=mermaid_code,
+                success=bool(img_bytes),
+                error_message=err,
+            )
         if img_bytes:
             await message.reply_photo(
                 photo=io.BytesIO(img_bytes),
@@ -221,6 +268,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         state["extra_result"] = None
         state["extra_request"] = None
         state["return_after_help"] = None
+        state["analysis_db_id"] = None
         state["step_entered_at"] = time.time()
         set_state(user_id, state)
         msg = get_step_message("1")
@@ -244,6 +292,7 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
             log_activity(context.bot, user, "кнопка", step, "1", duration, text)
             state["return_after_help"] = None
             state["step"] = "1"
+            state["analysis_db_id"] = None
             state["step_entered_at"] = time.time()
             set_state(user_id, state)
             msg = get_step_message("1")
@@ -348,6 +397,15 @@ async def handle_document(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         analysis_text = await analyze_problem_with_llm(state)
         state["analysis_result"] = analysis_text
         set_state(user_id, state)
+        internal_id = await upsert_user(user_id, getattr(user, "username", None), _user_full_name(user))
+        if internal_id is not None:
+            data_obj = state.get("data", {})
+            texts = data_obj.get("texts", [])
+            files_desc = data_obj.get("file_descriptions", [])
+            analysis_db_id = await insert_analysis(internal_id, texts, files_desc, analysis_result=analysis_text)
+            if analysis_db_id is not None:
+                state["analysis_db_id"] = analysis_db_id
+                set_state(user_id, state)
         kb = get_step_inline_keyboard("2_result") or get_step_keyboard("2_result")
         await reply_with_photo(update, analysis_text, "2_result", kb, parse_mode="HTML")
     else:
@@ -407,6 +465,15 @@ async def handle_photo(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
             analysis_text = await analyze_problem_with_llm(state)
             state["analysis_result"] = analysis_text
             set_state(user_id, state)
+            internal_id = await upsert_user(user_id, getattr(user, "username", None), _user_full_name(user))
+            if internal_id is not None:
+                data_obj = state.get("data", {})
+                texts = data_obj.get("texts", [])
+                files_desc = data_obj.get("file_descriptions", [])
+                analysis_db_id = await insert_analysis(internal_id, texts, files_desc, analysis_result=analysis_text)
+                if analysis_db_id is not None:
+                    state["analysis_db_id"] = analysis_db_id
+                    set_state(user_id, state)
             kb = get_step_inline_keyboard("2_result") or get_step_keyboard("2_result")
             await reply_with_photo(update, analysis_text, "2_result", kb, parse_mode="HTML")
         else:
